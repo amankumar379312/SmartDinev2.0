@@ -69,6 +69,7 @@ button:disabled{opacity:0.45;cursor:not-allowed;}
 `;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const MODEL_CHAIN = ["models/gemini-3.1-flash-lite-preview", "gemini-2.5-flash", "gemini-2.0-flash"];
 
 // ════════════════════════════════════════════════════════
 // MODE TOGGLE BUTTON
@@ -220,7 +221,6 @@ export default function Assistant() {
   }, [cart, menuItems, currentTableId, user, navigate]);
 
   // ── AI ─────────────────────────────────────────
-  const MODEL_CHAIN = ["models/gemini-3.1-flash-lite-preview", "gemini-2.5-flash", "gemini-2.0-flash"];
   const modelIdxRef = useRef(0);
   const sessionRef = useRef(null);
   const genAIRef = useRef(null);
@@ -349,7 +349,7 @@ function VoiceMode({
     setReply(msg);
     speak(msg, () => setPhase("idle"));
     setPhase("speaking");
-  }, []);
+  }, [initSession, name]);
 
   const speak = (text, onEnd) => {
     if (!window.speechSynthesis) { onEnd?.(); return; }
@@ -698,7 +698,7 @@ function ChatMode({
       { from: "bot", text: `${g}, ${name}! Welcome to SmartDine 🍽️` },
       { from: "bot", text: "I'm Nova, your AI dining companion. What are you in the mood for today?", suggestions: ["🔥 Something spicy", "🥗 Light & healthy", "🍽️ Chef's pick", "📋 Full menu"] },
     ]);
-  }, []);
+  }, [initSession, name]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
 
