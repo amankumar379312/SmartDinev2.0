@@ -191,10 +191,10 @@ function EtaClockPicker({ value, onChange }) {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 5, justifyContent: "center", maxWidth: 240 }}>
         {PRESETS.map(p => (
           <button key={p} onClick={() => onChange(String(p))} style={{
-            padding: "3px 8px", borderRadius: 6, border: `1px solid ${value == p ? C.orange : C.border2}`,
-            background: value == p ? C.orangeDim : "transparent",
-            color: value == p ? C.orange : C.mutedMid,
-            fontSize: 11, fontWeight: value == p ? 700 : 400, cursor: "pointer",
+            padding: "3px 8px", borderRadius: 6, border: `1px solid ${value === p ? C.orange : C.border2}`,
+            background: value === p ? C.orangeDim : "transparent",
+            color: value === p ? C.orange : C.mutedMid,
+            fontSize: 11, fontWeight: value === p ? 700 : 400, cursor: "pointer",
           }}>{p}m</button>
         ))}
       </div>
@@ -207,7 +207,6 @@ function EtaClockPicker({ value, onChange }) {
 export default function CookDashboard() {
   const rootRef = useRef(null);
   const [orders, setOrders]         = useState([]);
-  const [loading, setLoading]       = useState(true);
   const [notification, setNotif]    = useState(null);
   const [etaByOrder, setEtaByOrder] = useState({});
   const [filter, setFilter]         = useState("all");
@@ -255,7 +254,6 @@ export default function CookDashboard() {
       active.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
       setOrders(active);
     } catch (e) { console.error(e); }
-    finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -722,10 +720,9 @@ function NewOrderCard({ order, etaValue, onEtaChange, onAccept, clockOpen, onClo
 // ─── Cooking Card ─────────────────────────────────────────────────────────────
 
 function CookingCard({ order, onAction }) {
-  // tick forces re-render every second so all derived values are fresh
-  const [tick, setTick] = useState(0);
+  const [, forceTick] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 1000);
+    const id = setInterval(() => forceTick((value) => value + 1), 1000);
     return () => clearInterval(id);
   }, []);
 
@@ -757,11 +754,6 @@ function CookingCard({ order, onAction }) {
     : isLastMin  ? C.amberText
     : isPrep     ? C.blueText
     :              C.amberText;
-
-  const barColor = isOverdue ? C.redMuted
-    : isLastMin  ? "#f59e0b"
-    : isPrep     ? C.blueMuted
-    :              C.amberMuted;
 
   return (
     <div style={{

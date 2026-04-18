@@ -247,7 +247,7 @@ export default function AdminDashboard() {
 
   const geminiEnabled = Boolean(process.env.REACT_APP_GEMINI_API_KEY);
 
-  const buildRangeParams = (override = {}) => {
+  const buildRangeParams = useCallback((override = {}) => {
     const nextTimeRange = override.timeRange || timeRange;
     const nextAppliedRange = override.appliedRange !== undefined ? override.appliedRange : appliedRange;
     if (nextTimeRange === "custom" && nextAppliedRange?.startDate && nextAppliedRange?.endDate) {
@@ -258,9 +258,9 @@ export default function AdminDashboard() {
       };
     }
     return { timeRange: nextTimeRange };
-  };
+  }, [appliedRange, timeRange]);
 
-  const generateAdminGeminiJson = async (prompt) => {
+  const generateAdminGeminiJson = useCallback(async (prompt) => {
     if (!geminiEnabled) return null;
 
     if (!genAIRef.current) {
@@ -305,7 +305,7 @@ export default function AdminDashboard() {
     }
 
     return null;
-  };
+  }, [geminiEnabled]);
 
   const fetchDashboard = useCallback(async () => {
     // First load — show full spinner. Subsequent range changes — keep UI, just refresh data.
@@ -364,7 +364,7 @@ ${JSON.stringify(buildAdminInsightContext(data), null, 2)}
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, [appliedRange, dashboard, geminiEnabled, timeRange]);
+  }, [buildRangeParams, dashboard, geminiEnabled, generateAdminGeminiJson]);
 
   const fetchMenu = async () => {
     try {
@@ -420,12 +420,12 @@ ${JSON.stringify(buildAdminInsightContext(data), null, 2)}
 
   const topMeta = META[activePanel] || META.overview;
   const requestCount = dashboard?.requests?.pendingCount || 0;
-  const staffList = dashboard?.staff?.[staffTab] || [];
   const filteredStaff = useMemo(() => {
+    const staffList = dashboard?.staff?.[staffTab] || [];
     const q = staffSearch.trim().toLowerCase();
     if (!q) return staffList;
     return staffList.filter((staff) => [staff.name, staff.email, staff.phone].some((v) => String(v || "").toLowerCase().includes(q)));
-  }, [staffList, staffSearch]);
+  }, [dashboard, staffSearch, staffTab]);
 
   const filteredUsers = useMemo(() => {
     const items = dashboard?.users?.items || [];

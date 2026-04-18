@@ -4,7 +4,7 @@ import API from "../api";
 import { resolveSocketBaseUrl } from "../utils/runtimeConfig";
 import { menu } from "../data/menu";
 import LogoutButton from "../components/LogoutButton";
-import { RefreshCw, Plus, Check, Clock, User, Utensils, LayoutGrid, BellRing, X, Trash2, Sparkles, Armchair, UsersRound, Ban, UtensilsCrossed } from "lucide-react";
+import { RefreshCw, Plus, Check, Clock, User, LayoutGrid, BellRing, X, Trash2, Sparkles, Armchair, UsersRound, Ban, UtensilsCrossed } from "lucide-react";
 
 // ── SOCKET ────────────────────────────────────────────────────────────────────
 const SOCKET_URL = resolveSocketBaseUrl();

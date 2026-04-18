@@ -9,7 +9,6 @@ import {
   Ban,
   ArrowRight,
   LayoutGrid,
-  Clock3,
 } from "lucide-react";
 import API from "../api";
 import LogoutButton from "../components/LogoutButton";

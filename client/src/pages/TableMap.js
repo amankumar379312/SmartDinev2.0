@@ -29,7 +29,7 @@ export default function TableMap() {
     return () => {
       socket.off('tableHeld'); socket.off('tableOccupied'); socket.off('tableReleased');
     };
-  }, []);
+  }, [socketRef]);
 
   async function onSelectTable(t) {
     if (t.status !== 'available') return alert('Table not available');

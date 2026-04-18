@@ -59,7 +59,7 @@ const Signup = () => {
     setIsSuccess(false);
 
     try {
-      const response = await API.post("/auth/register", form);
+      await API.post("/auth/register", form);
 
       setIsSuccess(true);
       setModalType("success");

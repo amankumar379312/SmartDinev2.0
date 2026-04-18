@@ -146,6 +146,16 @@ const Navbar = ({ transparent = false }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  const scrollToSection = (sectionId) => {
+    if (!sectionId) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setMobileMenuOpen(false);
+      return;
+    }
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth' });
+    setMobileMenuOpen(false);
+  };
+
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 50);
     window.addEventListener('scroll', handleScroll);
@@ -164,9 +174,9 @@ const Navbar = ({ transparent = false }) => {
         </div>
 
         <div className="hidden items-center gap-8 md:flex">
-          <a href="#" className="font-medium transition-colors hover:text-orange-500">Home</a>
-          <a href="#about" className="font-medium transition-colors hover:text-orange-500">About Us</a>
-          <a href="#reviews" className="font-medium transition-colors hover:text-orange-500">Reviews</a>
+          <button type="button" onClick={() => scrollToSection()} className="font-medium transition-colors hover:text-orange-500">Home</button>
+          <button type="button" onClick={() => scrollToSection('about')} className="font-medium transition-colors hover:text-orange-500">About Us</button>
+          <button type="button" onClick={() => scrollToSection('reviews')} className="font-medium transition-colors hover:text-orange-500">Reviews</button>
           <div className="ml-4 flex items-center gap-3">
             <Button
               variant={transparent && !isScrolled ? 'outline' : 'ghost'}
@@ -188,9 +198,9 @@ const Navbar = ({ transparent = false }) => {
 
       {mobileMenuOpen && (
         <div className="absolute left-0 right-0 top-full flex flex-col gap-4 border-b border-gray-100 bg-white p-6 shadow-xl md:hidden">
-          <a href="#" className="py-2 text-left font-medium text-gray-700">Home</a>
-          <a href="#about" className="py-2 text-left font-medium text-gray-700">About Us</a>
-          <a href="#reviews" className="py-2 text-left font-medium text-gray-700">Reviews</a>
+          <button type="button" onClick={() => scrollToSection()} className="py-2 text-left font-medium text-gray-700">Home</button>
+          <button type="button" onClick={() => scrollToSection('about')} className="py-2 text-left font-medium text-gray-700">About Us</button>
+          <button type="button" onClick={() => scrollToSection('reviews')} className="py-2 text-left font-medium text-gray-700">Reviews</button>
           <hr />
           <Button
             variant="secondary"
@@ -218,6 +228,9 @@ const Navbar = ({ transparent = false }) => {
 
 const Footer = () => {
   const navigate = useNavigate();
+  const scrollToSection = (sectionId) => {
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   return (
     <footer className="bg-gray-900 py-16 text-gray-300">
@@ -243,7 +256,7 @@ const Footer = () => {
               </button>
             </li>
             <li>
-              <a href="#about" className="transition-colors hover:text-orange-500">Our Story</a>
+              <button type="button" className="transition-colors hover:text-orange-500" onClick={() => scrollToSection('about')}>Our Story</button>
             </li>
           </ul>
         </div>
@@ -260,9 +273,9 @@ const Footer = () => {
         <div>
           <h4 className="mb-6 text-sm font-bold uppercase tracking-wider text-white">Follow Us</h4>
           <div className="flex gap-4">
-            <a href="#" className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-800 transition-all hover:bg-orange-500 hover:text-white"><Facebook size={18} /></a>
-            <a href="#" className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-800 transition-all hover:bg-orange-500 hover:text-white"><Twitter size={18} /></a>
-            <a href="#" className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-800 transition-all hover:bg-orange-500 hover:text-white"><Instagram size={18} /></a>
+            <a href="https://facebook.com" target="_blank" rel="noreferrer" className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-800 transition-all hover:bg-orange-500 hover:text-white"><Facebook size={18} /></a>
+            <a href="https://twitter.com" target="_blank" rel="noreferrer" className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-800 transition-all hover:bg-orange-500 hover:text-white"><Twitter size={18} /></a>
+            <a href="https://instagram.com" target="_blank" rel="noreferrer" className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-800 transition-all hover:bg-orange-500 hover:text-white"><Instagram size={18} /></a>
           </div>
         </div>
       </div>
