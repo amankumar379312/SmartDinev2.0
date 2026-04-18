@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import API from "../api";
 import AdminSidebar from "../components/AdminSidebar";
@@ -27,7 +27,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Calendar, CalendarDays, Download, IndianRupee, Mail, MessageCircle, Moon, Phone, Search, Send, Sun, UserPlus, X, ClipboardList, TrendingUp, Users } from "lucide-react";
+import { Calendar, Download, IndianRupee, Mail, MessageCircle, Moon, Phone, Search, Send, Sun, UserPlus, X, ClipboardList, TrendingUp, Users } from "lucide-react";
 
 const COLORS = {
   blue: "#4a8cff",
@@ -236,7 +236,6 @@ export default function AdminDashboard() {
   const [appliedRange, setAppliedRange] = useState(null);
   const [orderSearch, setOrderSearch] = useState("");
   const [menuItems, setMenuItems] = useState([]);
-  const [menuLoading, setMenuLoading] = useState(false);
   const [menuTab, setMenuTab] = useState("starters");
   const [theme, setTheme] = useState(() => localStorage.getItem("sd-theme") || "dark");
   const toggleTheme = () => setTheme(prev => {
@@ -308,7 +307,7 @@ export default function AdminDashboard() {
     return null;
   };
 
-  const fetchDashboard = async () => {
+  const fetchDashboard = useCallback(async () => {
     // First load — show full spinner. Subsequent range changes — keep UI, just refresh data.
     const isFirstLoad = !dashboard;
     if (isFirstLoad) {
@@ -365,24 +364,21 @@ ${JSON.stringify(buildAdminInsightContext(data), null, 2)}
       setLoading(false);
       setIsRefreshing(false);
     }
-  };
+  }, [appliedRange, dashboard, geminiEnabled, timeRange]);
 
   const fetchMenu = async () => {
     try {
-      setMenuLoading(true);
       let res;
       try { res = await API.get("/menu/items"); } catch { res = await API.get("/menu"); }
       setMenuItems(Array.isArray(res.data) ? res.data : (res.data?.items || []));
     } catch (err) {
       console.error(err);
-    } finally {
-      setMenuLoading(false);
     }
   };
 
   useEffect(() => {
     fetchDashboard();
-  }, [timeRange, appliedRange]);
+  }, [fetchDashboard]);
 
   useEffect(() => {
     fetchMenu();

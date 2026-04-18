@@ -114,7 +114,7 @@ export function AuthProvider({ children }) {
     setUser,
     refreshWorkflow,
     setWorkflow,
-  }), [login, logout, refreshWorkflow, session, setUser, workflow]);
+  }), [login, logout, refreshWorkflow, session, setUser, workflow, workflowReady]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
