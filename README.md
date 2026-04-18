@@ -1,0 +1,1 @@
+SmartDine minimal project archive.

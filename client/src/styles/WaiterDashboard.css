@@ -1,0 +1,36 @@
+.waiter-wrap { padding: 20px; }
+.waiter-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+.waiter-header .actions { display:flex; gap:10px; }
+.primary { background:#2563eb; color:#fff; border:none; padding:8px 12px; border-radius:8px; }
+.muted { color:#666; }
+.small { font-size:12px; }
+
+.orders-grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.order-card { background:#fff; border:1px solid #ddd; border-radius:12px; padding:12px; }
+.order-head { display:flex; justify-content:space-between; margin-bottom:8px; }
+.status.pill.ready { background:#10b981; color:#fff; padding:2px 10px; border-radius:999px; font-size:.85rem; }
+.waiter-card { background:#fff; border:1px solid #ddd; border-radius:12px; padding:12px; }
+
+.drawer-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; justify-content:flex-end; z-index:1000; }
+.drawer { background:#fff; width:min(980px, 96vw); height:100%; display:flex; flex-direction:column; }
+.drawer-header { padding:12px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; }
+.drawer-content { padding:12px 16px; overflow:auto; }
+.drawer-columns { display:grid; grid-template-columns: 1fr 360px; gap:16px; align-items:start; }
+
+.menu-section { margin-bottom:16px; }
+.menu-grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.menu-card { background:#fff; border:1px solid #ddd; border-radius:12px; padding:12px; }
+.menu-top { display:flex; justify-content:space-between; margin-bottom:6px; }
+.menu-name { font-weight:600; }
+.menu-price { font-weight:600; }
+.menu-desc { font-size:12px; color:#555; margin-bottom:8px; }
+.add-btn { width:100%; }
+
+.cart-card { background:#fff; border:1px solid #ddd; border-radius:12px; padding:12px; position:sticky; top:8px; }
+.cart-list { list-style:none; padding:0; display:grid; gap:8px; margin:8px 0; }
+.cart-row { display:grid; grid-template-columns: 1fr auto auto; gap:10px; align-items:center; }
+.cart-controls { display:flex; align-items:center; gap:6px; }
+.cart-controls .remove { margin-left:6px; }
+.cart-line { min-width:86px; text-align:right; }
+.cart-total { display:flex; justify-content:space-between; margin:10px 0; }
+.place-form { display:grid; gap:10px; margin-top:8px; }

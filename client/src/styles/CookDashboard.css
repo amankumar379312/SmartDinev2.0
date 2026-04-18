@@ -1,0 +1,19 @@
+.cook-wrap{padding:24px;min-height:100dvh;background:#f8fafc}
+.cook-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.cook-header h1{margin:0}
+.refresh-btn{border:none;background:#111827;color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer}
+
+.orders-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.order-card{background:#fff;border-radius:14px;box-shadow:0 10px 25px rgba(0,0,0,.06);padding:16px}
+.order-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.order-id{font-weight:700}
+.pill{padding:4px 10px;border-radius:999px;font-size:.85rem}
+.pill.pending{background:#fff7ed}
+.pill.preparing{background:#eff6ff}
+.pill.ready{background:#ecfeff}
+.pill.completed{background:#f1f5f9}
+.meta{font-size:.95rem;color:#374151;display:grid;gap:4px;margin-bottom:8px}
+.items ul{margin:6px 0 0 18px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.actions button{border:none;background:#2563eb;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer}
+.actions button:active{transform:translateY(1px)}

@@ -1,0 +1,110 @@
+/* Center and match SmartDine theme */
+body {
+  font-family: "Poppins", sans-serif;
+ 
+  margin: 0;
+  color: #1f2937;
+}
+
+.bill-container {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.bill-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border-radius: 25px;
+  box-shadow: 0 8px 35px rgba(0, 0, 0, 0.12);
+  padding: 40px 50px;
+  max-width: 500px;
+  width: 100%;
+  text-align: center;
+}
+
+.bill-title {
+  font-size: 2rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 15px;
+}
+
+.bill-info {
+  text-align: left;
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 25px;
+  line-height: 1.7;
+  color: #334155;
+}
+
+.bill-items {
+  text-align: left;
+  margin-bottom: 20px;
+}
+
+.bill-items h2 {
+  font-size: 1.2rem;
+  color: #2563eb;
+  margin-bottom: 8px;
+}
+
+.bill-items ul {
+  list-style-type: "🍴 ";
+  padding-left: 1.5rem;
+}
+
+.bill-items li {
+  margin: 6px 0;
+  color: #475569;
+}
+
+.bill-total {
+  margin-top: 20px;
+  background: #eff6ff;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.bill-total h2 {
+  font-size: 1.1rem;
+  color: #1d4ed8;
+  margin: 0;
+}
+
+.bill-total p {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin: 5px 0 0;
+  color: #0f172a;
+}
+
+.bill-btn {
+  margin-top: 28px;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  padding: 14px 24px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: 100%;
+}
+
+.bill-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 18px rgba(37, 99, 235, 0.25);
+}
+
+.bill-msg {
+  text-align: center;
+  padding: 50px;
+  font-size: 1.1rem;
+  color: #475569;
+}

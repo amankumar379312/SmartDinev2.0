@@ -1,0 +1,137 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+/* 🌐 Global custom styles */
+/* body {
+  @apply bg-gray-50 text-gray-900 font-sans min-h-screen;
+}
+
+h1, h2, h3, h4 {
+  @apply text-gray-800 font-semibold;
+}
+
+button {
+  @apply bg-blue-600 text-white px-4 py-2 rounded-lg font-medium
+  hover:bg-blue-700 active:scale-95 transition;
+}
+
+input, select {
+  @apply border border-gray-300 rounded-lg px-3 py-2 w-full
+  focus:ring-2 focus:ring-blue-400 focus:outline-none;
+}
+
+.card {
+  @apply bg-white p-6 rounded-xl shadow hover:shadow-md transition;
+}
+
+.text-muted {
+  @apply text-gray-500;
+}
+
+.table-status {
+  @apply text-xs uppercase font-semibold tracking-wide;
+}
+ */
+
+/* --- KEYFRAMES (keep them OUTSIDE @layer) --- */
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInDown {
+  from { opacity: 0; transform: translateY(-20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes floatUp {
+  0%, 100% { transform: translateY(0px); }
+  50%      { transform: translateY(-8px); }
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(249, 115, 22, 0.3); }
+  50%      { box-shadow: 0 0 30px rgba(249, 115, 22, 0.6); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+
+@keyframes pulse-custom {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.6; }
+}
+
+@keyframes bounce-slight {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+
+@keyframes rotate-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* --- CLASSES INSIDE @layer --- */
+@layer utilities {
+  .animate-slide-up     { animation: slideInUp 0.6s ease-out; }
+  .animate-slide-down   { animation: slideInDown 0.6s ease-out; }
+  .animate-slide-left   { animation: slideInLeft 0.6s ease-out; }
+  .animate-slide-right  { animation: slideInRight 0.6s ease-out; }
+  .animate-fade-in      { animation: fadeIn 0.8s ease-out; }
+  .animate-scale-in     { animation: scaleIn 0.4s ease-out; }
+  .animate-float        { animation: floatUp 3s ease-in-out infinite; }
+  .animate-glow         { animation: glow 2s ease-in-out infinite; }
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.2),
+      transparent
+    );
+    background-size: 1000px 100%;
+    animation: shimmer 3s infinite;
+  }
+  .animate-pulse-custom { animation: pulse-custom 2s ease-in-out infinite; }
+  .animate-bounce-slight { animation: bounce-slight 0.6s ease-in-out; }
+  .animate-spin-slow    { animation: rotate-spin 3s linear infinite; }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-in-out;
+}

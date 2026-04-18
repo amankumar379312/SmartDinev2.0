@@ -1,0 +1,139 @@
+/* ---------- LAYOUT ---------- */
+.ty-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: url("./1.png") center/cover fixed no-repeat, #f3f4f6;
+}
+
+.ty-card {
+  width: 100%;
+  max-width: 640px;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+  padding: 30px 28px;
+  color: #0f172a;
+  text-align: center;
+}
+
+/* ---------- HEADER ---------- */
+.ty-header h1 {
+  font-size: 1.8rem;
+  margin-bottom: 8px;
+}
+.ty-muted {
+  color: #64748b;
+}
+
+/* ---------- QUESTIONS ---------- */
+.ty-question-group {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.ty-question h2 {
+  font-size: 1.1rem;
+  margin-bottom: 6px;
+  color: #1e293b;
+}
+
+.ty-stars {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.ty-star {
+  font-size: 32px;
+  color: #e2e8f0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+.ty-star:hover {
+  transform: scale(1.2);
+}
+.ty-star.active {
+  color: #fbbf24;
+}
+
+/* ---------- COMMENT ---------- */
+.ty-comment {
+  margin-top: 20px;
+  text-align: left;
+}
+.ty-comment label {
+  display: block;
+  font-size: 0.95rem;
+  margin-bottom: 6px;
+  color: #374151;
+}
+.ty-comment textarea {
+  width: 100%;
+  min-height: 80px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 10px;
+  outline: none;
+  resize: vertical;
+}
+.ty-comment textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+/* ---------- BUTTONS ---------- */
+.ty-actions {
+  margin-top: 22px;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+.btn {
+  padding: 12px 24px;
+  font-size: 1rem;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: 600;
+}
+.btn.ghost {
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  color: #111827;
+}
+.btn.ghost:hover {
+  background: #f3f4f6;
+}
+.btn.primary {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff;
+  border: none;
+}
+.btn.primary:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---------- FOOTER ---------- */
+.ty-msg {
+  margin-top: 10px;
+  font-size: 0.9rem;
+  color: #475569;
+}
+.ty-legal {
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
