@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const MenuItem = require("../models/MenuItem");
+const Order = require("../models/Order");
+const PreviousOrder = require("../models/PreviousOrder");
+const Feedback = require("../models/Feedback");
 const auth = require("../middleware/auth");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
@@ -184,6 +187,14 @@ function buildCartSummary(cartItems) {
   };
 }
 
+function splitOrderItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .flatMap((value) => String(value || "").split(/,\s*/))
+    .map((value) => value.replace(/\s*x\s*\d+$/i, "").trim())
+    .filter(Boolean);
+}
+
 function buildMenuLookup(menuItems) {
   return new Map(menuItems.map((item) => [item.name.toLowerCase(), item]));
 }
@@ -305,11 +316,22 @@ function buildRelevantMenuItems(userMessage, menuItems, cartItems) {
   ]).slice(0, 12);
 }
 
-function buildAssistantContext({ message, guestName, tableId, cartItems, menuItems }) {
+function buildAssistantContext({
+  message,
+  guestName,
+  guestEmail,
+  tableId,
+  cartItems,
+  menuItems,
+  currentOrders = [],
+  previousOrders = [],
+  feedbacks = [],
+}) {
   const relevantMenuItems = buildRelevantMenuItems(message, menuItems, cartItems);
   const intent = classifyAssistantIntent(message, menuItems);
   return {
     guestName: guestName || "Guest",
+    guestEmail: guestEmail || "",
     tableId: tableId || "walkin",
     message: String(message || "").trim(),
     normalizedMessage: normalizePlainText(message),
@@ -325,11 +347,119 @@ function buildAssistantContext({ message, guestName, tableId, cartItems, menuIte
       price: item.price,
       description: item.description || "",
     })),
+    popularity: buildPopularitySummary(menuItems, currentOrders, previousOrders),
+    userHistory: buildUserHistorySummary(guestEmail, tableId, previousOrders),
+    feedback: buildFeedbackSummary(feedbacks),
     mentionedItems: inferMenuMentions(message, menuItems).slice(0, 6).map((item) => item.name),
     budgets: {
       requestedBudget: extractBudget(message),
     },
     allowedActions: ["add_to_cart", "remove_from_cart", "show_menu", "open_cart", "place_order", "ask_choice"],
+  };
+}
+
+function buildPopularitySummary(menuItems, currentOrders = [], previousOrders = []) {
+  const counts = new Map();
+  const allOrders = [...currentOrders, ...previousOrders];
+  for (const order of allOrders) {
+    for (const itemName of splitOrderItems(order?.items)) {
+      const key = itemName.toLowerCase();
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+  }
+
+  return menuItems
+    .map((item) => ({
+      name: item.name,
+      orderCount: counts.get(item.name.toLowerCase()) || 0,
+      price: item.price,
+      category: item.category,
+    }))
+    .sort((a, b) => b.orderCount - a.orderCount || a.price - b.price)
+    .slice(0, 8);
+}
+
+function buildUserHistorySummary(userEmail, tableId, previousOrders = []) {
+  const normalizedEmail = String(userEmail || "").trim().toLowerCase();
+  const normalizedTableId = String(tableId || "").trim();
+  const matches = previousOrders.filter((order) => {
+    const sameEmail = normalizedEmail && String(order.userEmail || "").trim().toLowerCase() === normalizedEmail;
+    const sameTable = normalizedTableId && String(order.tableNo || "").trim() === normalizedTableId;
+    return sameEmail || sameTable;
+  });
+
+  const recentOrders = matches
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+    .slice(0, 5);
+  const favoriteCounts = new Map();
+  for (const order of matches) {
+    for (const itemName of splitOrderItems(order.items)) {
+      const key = itemName.toLowerCase();
+      favoriteCounts.set(key, (favoriteCounts.get(key) || 0) + 1);
+    }
+  }
+
+  const favorites = [...favoriteCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 5)
+    .map(([name, count]) => ({ name, count }));
+
+  return {
+    orderCount: matches.length,
+    recentOrders: recentOrders.map((order) => ({
+      items: splitOrderItems(order.items).slice(0, 5),
+      totalCost: Number(order.totalCost) || 0,
+      status: String(order.status || ""),
+      createdAt: order.createdAt || null,
+    })),
+    favorites,
+  };
+}
+
+function buildFeedbackSummary(feedbacks = []) {
+  if (!feedbacks.length) {
+    return {
+      averageOverall: null,
+      averageFoodQuality: null,
+      averageServiceSpeed: null,
+      recentComments: [],
+    };
+  }
+
+  let overallSum = 0;
+  let foodSum = 0;
+  let serviceSum = 0;
+  let overallCount = 0;
+  let foodCount = 0;
+  let serviceCount = 0;
+
+  for (const feedback of feedbacks) {
+    const ratings = feedback.ratings || {};
+    const overall = Number(ratings.overall);
+    const food = Number(ratings.foodQuality);
+    const service = Number(ratings.serviceSpeed || ratings.overall);
+    if (overall > 0) {
+      overallSum += overall;
+      overallCount += 1;
+    }
+    if (food > 0) {
+      foodSum += food;
+      foodCount += 1;
+    }
+    if (service > 0) {
+      serviceSum += service;
+      serviceCount += 1;
+    }
+  }
+
+  return {
+    averageOverall: overallCount ? Number((overallSum / overallCount).toFixed(1)) : null,
+    averageFoodQuality: foodCount ? Number((foodSum / foodCount).toFixed(1)) : null,
+    averageServiceSpeed: serviceCount ? Number((serviceSum / serviceCount).toFixed(1)) : null,
+    recentComments: feedbacks
+      .map((feedback) => String(feedback.comment || "").trim())
+      .filter(Boolean)
+      .slice(0, 5),
   };
 }
 
@@ -655,6 +785,7 @@ function responseLooksWeak(response, context) {
 
   if (genericPatterns.some((pattern) => pattern.test(normalized))) return true;
   if (message.length > 220) return true;
+  if (/(^|\s)(menu|cart|bill)\s*:?$/i.test(message)) return true;
 
   const mentionsKnownItem = context.relevantMenuItems.some((item) =>
     normalized.includes(normalizePlainText(item.name))
@@ -687,6 +818,9 @@ function buildAssistantPrompt(context) {
     cart: context.cart,
     menuOverview: context.menuOverview,
     relevantMenuItems: context.relevantMenuItems,
+    popularity: context.popularity,
+    userHistory: context.userHistory,
+    feedback: context.feedback,
     mentionedItems: context.mentionedItems,
     requestedBudget: context.budgets.requestedBudget,
     allowedActions: context.allowedActions,
@@ -735,10 +869,13 @@ STRICT RULES:
 - If the guest says something casual or random, respond in a friendly human way and gently steer the conversation back toward menu help or ordering.
 - Do not return show_menu or open_cart unless the guest explicitly asked to open/show the menu/cart/bill.
 - Use RELEVANT_MENU_ITEMS and MENU_OVERVIEW as the source of truth for recommendations. If something is not in context, do not invent it.
+- Use POPULARITY, USER_HISTORY, and FEEDBACK when choosing what to recommend or how to frame the reply.
 - Prefer concise waiter replies with one clear next step.
 - Keep the reply to the point. Usually 1 sentence, at most 2 short sentences.
 - For recommendation, budget, and dietary intents, mention exact relevant menu items or prices from context. Do not answer vaguely.
 - If your draft would be generic, replace it with a sharper recommendation or one short clarifying question.
+- The reply must sound human and waiter-like, but every factual claim must come from CONTEXT.
+- Return valid JSON even for casual chat. Never return raw labels like "Menu" or malformed fragments.
 
 CONTEXT:
 ${compactContext}
@@ -1023,6 +1160,7 @@ router.post("/assistant", auth, async (req, res) => {
   try {
     const message = String(req.body?.message || "").trim();
     const guestName = String(req.body?.guestName || req.user?.name || "").trim();
+    const guestEmail = String(req.user?.email || "").trim();
     const tableId = String(req.body?.tableId || "").trim();
     const cartItems = normalizeCartItems(req.body?.cart || []);
 
@@ -1030,21 +1168,24 @@ router.post("/assistant", auth, async (req, res) => {
       return res.status(400).json({ message: "message is required" });
     }
 
-    const menu = await MenuItem.find({}).sort({ category: 1, name: 1 }).lean();
+    const [menu, currentOrders, previousOrders, feedbacks] = await Promise.all([
+      MenuItem.find({}).sort({ category: 1, name: 1 }).lean(),
+      Order.find({}).sort({ createdAt: -1 }).limit(100).lean(),
+      PreviousOrder.find({}).sort({ createdAt: -1 }).limit(200).lean(),
+      Feedback.find({}).sort({ createdAt: -1 }).limit(50).lean(),
+    ]);
     const normalizedMenu = normalizeMenuItems(menu);
     const context = buildAssistantContext({
       message,
       guestName,
+      guestEmail,
       tableId,
       cartItems,
       menuItems: normalizedMenu,
+      currentOrders,
+      previousOrders,
+      feedbacks,
     });
-
-    const deterministicResponse = resolveDeterministicIntent(context, normalizedMenu);
-    if (deterministicResponse) {
-      console.log("[AI:assistant] final=deterministic_response");
-      return res.json(deterministicResponse);
-    }
 
     const response = await generateAssistantJson(context, normalizedMenu);
     if (response) {
