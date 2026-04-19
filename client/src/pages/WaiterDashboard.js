@@ -41,10 +41,10 @@ export default function WaiterDashboard() {
   // Waiter call notifications: { id, tableId, orderId, accepted }
   const [waiterCalls, setWaiterCalls] = useState([]);
 
-  // ── NEW: Clean table notifications: { id, tableId, orderId, total, done }
+  // Clean table notifications: { id, tableId, orderId, total, done }
   const [cleanRequests, setCleanRequests] = useState([]);
-  
-  // ── Custom Confirm Modal State ──
+
+  // Custom Confirm Modal State
   const [confirmCleanOpen, setConfirmCleanOpen] = useState(null);
   const [confirmServeOpen, setConfirmServeOpen] = useState(null);
   const [confirmCashOpen, setConfirmCashOpen] = useState(null);
@@ -135,8 +135,6 @@ export default function WaiterDashboard() {
 
   // ── SOCKET: waiter room ───────────────────────────────────────────────────
   useEffect(() => {
-    // Emit joinWaiters immediately AND on every reconnect
-    // so room membership survives page refreshes / socket drops
     const joinWaiters = () => {
       console.log("Joining waiters room...");
       socket.emit("joinWaiters");
@@ -144,7 +142,6 @@ export default function WaiterDashboard() {
     joinWaiters();
     socket.on("connect", joinWaiters);
 
-    // Waiter call
     const handleWaiterCalled = ({ tableId, orderId }) => {
       setWaiterCalls(prev => {
         if (prev.some(c => c.tableId === tableId && !c.accepted)) return prev;
@@ -152,11 +149,9 @@ export default function WaiterDashboard() {
       });
     };
 
-    // ── Table clean request after payment ──
     const handleTableClean = ({ tableId, orderId, total }) => {
       console.log("table:clean received", { tableId, orderId, total });
       setCleanRequests(prev => {
-        // Don't duplicate if already pending for same table
         if (prev.some(c => c.tableId === tableId && !c.done)) return prev;
         return [...prev, { id: Date.now(), tableId, orderId, total, done: false }];
       });
@@ -194,9 +189,8 @@ export default function WaiterDashboard() {
   const dismissWaiterCall = (id) =>
     setWaiterCalls(prev => prev.filter(c => c.id !== id));
 
-  // ── ACCEPT CLEAN REQUEST (just acknowledges, waiter cleans manually) ───────
+  // ── ACCEPT CLEAN REQUEST ──────────────────────────────────────────────────
   const acceptCleanRequest = (req) => {
-    // Flip to "done" (accepted) state briefly, then remove
     setCleanRequests(prev => prev.map(c => c.id === req.id ? { ...c, done: true } : c));
     setTimeout(() => setCleanRequests(prev => prev.filter(c => c.id !== req.id)), 2500);
   };
@@ -243,6 +237,8 @@ export default function WaiterDashboard() {
     }
   };
 
+  // ── CASH RECEIVED (Table Status tab only) ────────────────────────────────
+  // billGroup includes _tableId so we can auto-clear the table after payment
   const markCashReceived = (billGroup) => {
     setConfirmCashOpen(billGroup);
   };
@@ -250,9 +246,21 @@ export default function WaiterDashboard() {
   const confirmCashReceived = async () => {
     if (!confirmCashOpen?.orderIds?.length) return;
     try {
+      // 1. Mark orders as paid — backend also updates WorkflowSession to redirect customer to /thank-you
       await API.post("/orders/markPaid/cash", { orderIds: confirmCashOpen.orderIds });
       setBillReadyTables((prev) => prev.filter((entry) => entry.tableNo !== confirmCashOpen.tableNo));
+
+      // 2. Auto-clear the table so it becomes available immediately
+      if (confirmCashOpen._tableId) {
+        try {
+          await API.patch(`/tables/clear/${confirmCashOpen._tableId}`);
+        } catch (clearErr) {
+          console.warn("Could not auto-clear table:", clearErr);
+        }
+      }
+
       fetchOrders();
+      fetchAllTables();
     } catch (e) {
       console.error("Failed to mark cash received", e);
       setInfoPopup({
@@ -396,14 +404,12 @@ export default function WaiterDashboard() {
                 : "border-blue-500/40 shadow-blue-500/20"}
             `}
           >
-            {/* Icon */}
             <div className={`w-12 h-12 rounded-full shadow-inner flex items-center justify-center flex-shrink-0 ${req.done ? "bg-emerald-500/10 border border-emerald-500/30" : "bg-blue-500/10 border border-blue-500/30 animate-pulse"}`}>
               {req.done
                 ? <Check className="w-6 h-6 text-emerald-400" />
                 : <Sparkles className="w-6 h-6 text-blue-400" />}
             </div>
 
-            {/* Content */}
             <div className="flex-1 min-w-0 pt-0.5">
               {req.done ? (
                 <>
@@ -421,7 +427,6 @@ export default function WaiterDashboard() {
               )}
             </div>
 
-            {/* Actions */}
             {!req.done ? (
               <div className="flex flex-col gap-2 flex-shrink-0">
                 <button
@@ -443,7 +448,6 @@ export default function WaiterDashboard() {
       </div>
 
       {/* Background */}
-
       <div className="absolute top-20 right-10 w-40 h-40 bg-orange-500/10 rounded-full blur-3xl animate-pulse" />
       <div className="absolute bottom-40 left-10 w-60 h-60 bg-blue-500/5 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
 
@@ -464,7 +468,6 @@ export default function WaiterDashboard() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            {/* Pending waiter calls badge */}
             {pendingCallsCount > 0 && (
               <div className="flex items-center gap-2 px-4 py-2 bg-red-900/60 border border-red-500/50 rounded-xl animate-pulse">
                 <BellRing className="w-4 h-4 text-red-300" />
@@ -474,7 +477,6 @@ export default function WaiterDashboard() {
               </div>
             )}
 
-            {/* Pending clean requests badge */}
             {pendingCleanCount > 0 && (
               <div className="flex items-center gap-2 px-4 py-2 bg-violet-900/60 border border-violet-500/50 rounded-xl animate-pulse">
                 <Sparkles className="w-4 h-4 text-violet-300" />
@@ -521,7 +523,7 @@ export default function WaiterDashboard() {
           </div>
         </div>
 
-        {/* ORDERS TAB */}
+        {/* ── ORDERS TAB ── */}
         {activeTab === "orders" && (
           <>
             <div className="mb-6 flex justify-between items-center">
@@ -530,76 +532,6 @@ export default function WaiterDashboard() {
                 <span className="text-white font-bold tracking-wider text-sm">{readyOrders.length} ORDERS READY</span>
               </div>
               {loading && readyOrders.length > 0 && <RefreshCw className="w-5 h-5 text-slate-500 animate-spin" />}
-            </div>
-
-            <div className="mb-8">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="inline-flex items-center gap-3 px-5 py-2.5 bg-slate-900/80 backdrop-blur-md border border-emerald-500/40 rounded-xl shadow-lg">
-                  <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                  <span className="text-white font-bold tracking-wider text-sm">{billReadyTables.length} TABLES READY FOR BILL</span>
-                </div>
-              </div>
-
-              {!loading && billReadyTables.length === 0 && (
-                <div className="mb-6 rounded-2xl border border-slate-700/70 bg-black/30 p-6 text-center">
-                  <Receipt className="mx-auto mb-3 h-10 w-10 text-slate-500" />
-                  <p className="text-slate-200">No served tables waiting for cash collection</p>
-                </div>
-              )}
-
-              {billReadyTables.length > 0 && (
-                <div className="mb-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
-                  {billReadyTables.map((bill) => (
-                    <div key={bill.tableNo} className="rounded-[24px] border border-emerald-500/30 bg-[#0f172a]/90 p-6 shadow-xl shadow-emerald-500/10">
-                      <div className="mb-5 flex items-start justify-between gap-4">
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Ready For Bill</p>
-                          <h3 className="mt-2 text-2xl font-black text-white">{bill.tableNo}</h3>
-                        </div>
-                        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-emerald-300">
-                          Cash Pending
-                        </div>
-                      </div>
-
-                      <div className="mb-5 grid grid-cols-2 gap-4">
-                        <div className="rounded-2xl border border-slate-700/60 bg-slate-900/70 p-4">
-                          <p className="text-[10px] uppercase tracking-widest text-slate-500">Orders</p>
-                          <p className="mt-2 text-2xl font-black text-white">{bill.ordersCount}</p>
-                        </div>
-                        <div className="rounded-2xl border border-slate-700/60 bg-slate-900/70 p-4">
-                          <p className="text-[10px] uppercase tracking-widest text-slate-500">Items</p>
-                          <p className="mt-2 text-2xl font-black text-white">{bill.itemCount}</p>
-                        </div>
-                      </div>
-
-                      <div className="mb-6 space-y-2 text-sm text-slate-300">
-                        {bill.userEmail && (
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-slate-500" />
-                            <span className="truncate">{bill.userEmail}</span>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-slate-500" />
-                          <span>{bill.latestCreatedAt ? new Date(bill.latestCreatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</span>
-                        </div>
-                      </div>
-
-                      <div className="mb-6 flex items-end justify-between border-t border-slate-700/50 pt-5">
-                        <span className="text-[10px] uppercase tracking-widest text-slate-500">Collect Cash</span>
-                        <span className="text-3xl font-black text-white">₹{bill.totalCost}</span>
-                      </div>
-
-                      <button
-                        onClick={() => markCashReceived(bill)}
-                        className="w-full rounded-xl bg-emerald-500 py-4 text-sm font-black uppercase tracking-[0.16em] text-slate-950 shadow-[0_4px_20px_rgba(16,185,129,0.25)] transition-all hover:-translate-y-0.5 hover:bg-emerald-400"
-                      >
-                        Mark Cash Received
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
 
             {loading && readyOrders.length === 0 && (
@@ -624,7 +556,7 @@ export default function WaiterDashboard() {
                   style={{ animationDelay: `${idx * 100}ms` }}
                 >
                   <div className="absolute -top-12 -right-12 w-40 h-40 bg-orange-500/5 rounded-full blur-3xl group-hover:bg-orange-500/10 transition-all duration-500 pointer-events-none" />
-                  
+
                   <div className="relative z-10 flex flex-col h-full">
                     {/* Header */}
                     <div className="flex justify-between items-center mb-6">
@@ -724,7 +656,7 @@ export default function WaiterDashboard() {
           </>
         )}
 
-        {/* TABLE STATUS TAB */}
+        {/* ── TABLE STATUS TAB ── */}
         {activeTab === "tables" && (
           <div>
             <div className="flex items-center justify-between mb-6">
@@ -756,6 +688,8 @@ export default function WaiterDashboard() {
                   const needsClean = cleanRequests.some(c => c.tableId === tId && !c.done);
                   const billReady = billReadyTables.find((entry) => entry.tableNo === tId);
                   const canAcceptCash = Boolean(billReady?.orderIds?.length);
+                  // Attach the table's _id so confirmCashReceived can auto-clear it after payment
+                  const billReadyWithTableId = billReady ? { ...billReady, _tableId: table._id } : null;
 
                   return (
                     <div
@@ -763,7 +697,7 @@ export default function WaiterDashboard() {
                       className={`
                         relative px-2.5 py-3 sm:px-3 sm:py-3.5 rounded-2xl shadow-lg
                         transition-all duration-300 text-left flex flex-col justify-between
-                        min-h-[110px] sm:min-h-[120px] 
+                        min-h-[110px] sm:min-h-[120px]
                         ${needsClean
                           ? "bg-violet-900/30 border border-violet-500/70 shadow-[0_0_15px_rgba(139,92,246,0.3)] animate-pulse"
                           : canAcceptCash
@@ -837,13 +771,14 @@ export default function WaiterDashboard() {
                         </div>
                       </div>
 
+                      {/* Receive Cash — only shown when order is served & unpaid */}
                       {canAcceptCash && (
                         <button
-                          onClick={() => markCashReceived(billReady)}
+                          onClick={() => markCashReceived(billReadyWithTableId)}
                           className="w-full mt-3 py-1.5 px-3 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/50 text-emerald-300 text-[10px] font-bold uppercase tracking-wider rounded-lg flex items-center justify-center gap-1.5 transition-all active:scale-95"
                         >
                           <Receipt className="w-3 h-3" />
-                          Accept Cash
+                          Receive Cash
                         </button>
                       )}
 
@@ -923,6 +858,7 @@ export default function WaiterDashboard() {
         </div>
       )}
 
+      {/* CONFIRM CASH MODAL */}
       {confirmCashOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center transform transition-all">
@@ -934,7 +870,7 @@ export default function WaiterDashboard() {
               Confirm cash payment for <span className="font-bold text-emerald-300">{confirmCashOpen.tableNo}</span>.
             </p>
             <p className="text-sm text-slate-500 mb-6">
-              This will complete the order, send the guest to feedback, and notify waiters to clean the table.
+              This will complete the order, redirect the guest to feedback, and mark the table as available.
             </p>
             <div className="flex gap-3">
               <button
