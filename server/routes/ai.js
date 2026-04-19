@@ -57,6 +57,31 @@ function safeJsonParse(text, expectedType = "object") {
   }
 }
 
+function isRetryableGeminiError(error) {
+  const status = Number(error?.status || 0);
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    status === 404 ||
+    status === 429 ||
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    message.includes("404") ||
+    message.includes("429") ||
+    message.includes("500") ||
+    message.includes("502") ||
+    message.includes("503") ||
+    message.includes("504") ||
+    message.includes("quota") ||
+    message.includes("rate limit") ||
+    message.includes("service unavailable") ||
+    message.includes("high demand") ||
+    message.includes("temporarily unavailable")
+  );
+}
+
 function normalizeMenuItems(menu) {
   return menu.map((item) => ({
     id: String(item._id),
@@ -143,9 +168,7 @@ async function generateAssistantJson(prompt) {
           };
         }
       } catch (error) {
-        const message = String(error?.message || "");
-        const retryable = message.includes("404") || message.includes("429") || message.includes("quota");
-        if (!retryable) {
+        if (!isRetryableGeminiError(error)) {
           console.error("Assistant Gemini error:", error);
           break;
         }
@@ -176,9 +199,7 @@ async function generateRecommendationJson(prompt) {
         const parsed = safeJsonParse(text, "array");
         if (Array.isArray(parsed)) return parsed;
       } catch (error) {
-        const message = String(error?.message || "");
-        const retryable = message.includes("404") || message.includes("429") || message.includes("quota");
-        if (!retryable) {
+        if (!isRetryableGeminiError(error)) {
           console.error("Recommendation Gemini error:", error);
           break;
         }
