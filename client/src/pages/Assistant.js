@@ -346,9 +346,62 @@ function VoiceMode({
   const [transcript, setTranscript] = useState("");
   const [reply, setReply] = useState("");
   const recogRef = useRef(null);
+  const voiceRef = useRef(null);
   const hasSpeech = "SpeechRecognition" in window || "webkitSpeechRecognition" in window;
   const cartRef = useRef(cart);
   useEffect(() => { cartRef.current = cart; }, [cart]);
+
+  const pickPreferredVoice = useCallback(() => {
+    if (!window.speechSynthesis) return null;
+
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices.length) return null;
+
+    const englishVoices = voices.filter((voice) => /^en(-|_)/i.test(voice.lang) || voice.lang.toLowerCase().startsWith("en"));
+    const pool = englishVoices.length ? englishVoices : voices;
+    const femaleHints = [
+      "female",
+      "woman",
+      "zira",
+      "aria",
+      "jenny",
+      "samantha",
+      "victoria",
+      "karen",
+      "moira",
+      "susan",
+      "ava",
+      "alloy",
+      "nova",
+    ];
+
+    const preferred =
+      pool.find((voice) => /google uk english female/i.test(voice.name)) ||
+      pool.find((voice) => /microsoft (zira|aria|jenny)/i.test(voice.name)) ||
+      pool.find((voice) => /samantha|victoria|karen|moira|susan/i.test(voice.name)) ||
+      pool.find((voice) => femaleHints.some((hint) => voice.name.toLowerCase().includes(hint))) ||
+      pool.find((voice) => /google/i.test(voice.name)) ||
+      pool[0];
+
+    voiceRef.current = preferred || null;
+    return voiceRef.current;
+  }, []);
+
+  useEffect(() => {
+    if (!window.speechSynthesis) return undefined;
+
+    pickPreferredVoice();
+    const handleVoicesChanged = () => {
+      if (!voiceRef.current) pickPreferredVoice();
+    };
+
+    window.speechSynthesis.onvoiceschanged = handleVoicesChanged;
+    return () => {
+      if (window.speechSynthesis.onvoiceschanged === handleVoicesChanged) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+    };
+  }, [pickPreferredVoice]);
 
   useEffect(() => {
     initSession(0);
@@ -365,10 +418,13 @@ function VoiceMode({
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 0.92; u.pitch = 1.05;
-    const voices = window.speechSynthesis.getVoices();
-    const v = voices.find((v) => v.name.includes("Google") && v.lang.startsWith("en"))
-      || voices.find((v) => v.lang.startsWith("en"));
-    if (v) u.voice = v;
+    const selectedVoice = voiceRef.current || pickPreferredVoice();
+    if (selectedVoice) {
+      u.voice = selectedVoice;
+      u.lang = selectedVoice.lang || "en-US";
+    } else {
+      u.lang = "en-US";
+    }
     u.onstart = () => setPhase("speaking");
     u.onend = () => { setPhase("idle"); onEnd?.(); };
     window.speechSynthesis.speak(u);
@@ -528,9 +584,27 @@ function VoiceMode({
         </div>
 
         {/* Text display */}
-        <div className="tfade" style={{ width: "100%", maxWidth: 320, textAlign: "center", minHeight: 80, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div className="tfade" style={{
+          width: "100%",
+          maxWidth: 420,
+          padding: "0 8px",
+          textAlign: "center",
+          minHeight: 104,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}>
           {phase === "listening" && (
-            <p style={{ color: C.mutedMid, fontSize: 18, fontWeight: 300, lineHeight: 1.6 }}>
+            <p style={{
+              color: C.mutedMid,
+              fontSize: 18,
+              fontWeight: 300,
+              lineHeight: 1.6,
+              width: "100%",
+              whiteSpace: "normal",
+              overflowWrap: "anywhere",
+              wordBreak: "break-word",
+            }}>
               {transcript || "Listening..."}
             </p>
           )}
@@ -542,7 +616,16 @@ function VoiceMode({
             </div>
           )}
           {(phase === "speaking" || phase === "idle") && reply && (
-            <p style={{ color: C.text, fontSize: 15.5, fontWeight: 400, lineHeight: 1.7 }}>{reply}</p>
+            <p style={{
+              color: C.text,
+              fontSize: 15.5,
+              fontWeight: 400,
+              lineHeight: 1.7,
+              width: "100%",
+              whiteSpace: "normal",
+              overflowWrap: "anywhere",
+              wordBreak: "break-word",
+            }}>{reply}</p>
           )}
         </div>
 
