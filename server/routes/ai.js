@@ -5,13 +5,23 @@ const auth = require("../middleware/auth");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const GEMINI_MODEL_CHAIN = [
-  process.env.GEMINI_MODEL || "gemini-2.5-flash",
+  process.env.GEMINI_MODEL || "gemini-3.1-flash-lite-preview",
+  "gemini-2.5-flash",
   "gemini-2.0-flash",
   "gemini-1.5-flash",
 ].filter((model, index, list) => model && list.indexOf(model) === index);
 
-const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
-const geminiClient = geminiApiKey ? new GoogleGenerativeAI(geminiApiKey) : null;
+const GEMINI_API_KEYS = [
+  process.env.GEMINI_API_KEY_1,
+  process.env.GEMINI_API_KEY_2,
+  process.env.GEMINI_API_KEY_3,
+  process.env.GEMINI_API_KEY_4,
+  process.env.GEMINI_API_KEY_5,
+  process.env.GEMINI_API_KEY,
+  process.env.GOOGLE_API_KEY,
+].filter((key, index, list) => key && list.indexOf(key) === index);
+
+const geminiClients = GEMINI_API_KEYS.map((key) => new GoogleGenerativeAI(key));
 
 function safeJsonParse(text) {
   try {
@@ -75,29 +85,31 @@ function buildAssistantFallback(message, menuItems) {
 }
 
 async function generateAssistantJson(prompt) {
-  if (!geminiClient) return null;
+  if (!geminiClients.length) return null;
 
-  for (const modelName of GEMINI_MODEL_CHAIN) {
-    try {
-      const model = geminiClient.getGenerativeModel({
-        model: modelName,
-        generationConfig: {
-          temperature: 0.85,
-          maxOutputTokens: 600,
-          responseMimeType: "application/json",
-        },
-      });
+  for (const client of geminiClients) {
+    for (const modelName of GEMINI_MODEL_CHAIN) {
+      try {
+        const model = client.getGenerativeModel({
+          model: modelName,
+          generationConfig: {
+            temperature: 0.85,
+            maxOutputTokens: 600,
+            responseMimeType: "application/json",
+          },
+        });
 
-      const result = await model.generateContent(prompt);
-      const text = result?.response?.text?.() || "";
-      const parsed = safeJsonParse(text);
-      if (parsed) return parsed;
-    } catch (error) {
-      const message = String(error?.message || "");
-      const retryable = message.includes("404") || message.includes("429");
-      if (!retryable) {
-        console.error("Assistant Gemini error:", error);
-        break;
+        const result = await model.generateContent(prompt);
+        const text = result?.response?.text?.() || "";
+        const parsed = safeJsonParse(text);
+        if (parsed) return parsed;
+      } catch (error) {
+        const message = String(error?.message || "");
+        const retryable = message.includes("404") || message.includes("429") || message.includes("quota");
+        if (!retryable) {
+          console.error("Assistant Gemini error:", error);
+          break;
+        }
       }
     }
   }
@@ -111,7 +123,7 @@ router.post("/recommend", auth, async (req, res) => {
     const menu = await MenuItem.find({ available: true }).limit(50);
     const normalizedMenu = normalizeMenuItems(menu);
 
-    if (!geminiClient) {
+    if (!geminiClients.length) {
       const rec = normalizedMenu
         .filter((item) => !prefs.category || item.category === prefs.category)
         .slice(0, 3)
