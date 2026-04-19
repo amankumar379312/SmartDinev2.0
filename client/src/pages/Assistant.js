@@ -740,16 +740,6 @@ function VoiceMode({
     };
   }, [pickPreferredVoice]);
 
-  useEffect(() => {
-    initSession(0);
-    const hour = new Date().getHours();
-    const g = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-    const msg = `${g} ${name}! I'm Nova, your SmartDine AI waiter. Tap the orb and tell me what you'd like to eat!`;
-    setReply(msg);
-    speak(msg, () => setPhase("idle"));
-    setPhase("speaking");
-  }, [initSession, name, speak]);
-
   const speak = useCallback((text, onEnd) => {
     if (!window.speechSynthesis) { onEnd?.(); return; }
 
@@ -773,6 +763,16 @@ function VoiceMode({
       window.speechSynthesis.speak(u);
     })();
   }, [ensurePreferredVoice]);
+
+  useEffect(() => {
+    initSession(0);
+    const hour = new Date().getHours();
+    const g = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+    const msg = `${g} ${name}! I'm Nova, your SmartDine AI waiter. Tap the orb and tell me what you'd like to eat!`;
+    setReply(msg);
+    speak(msg, () => setPhase("idle"));
+    setPhase("speaking");
+  }, [initSession, name, speak]);
 
   const startListening = () => {
     if (!hasSpeech) return;
