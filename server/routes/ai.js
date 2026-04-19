@@ -23,9 +23,35 @@ const GEMINI_API_KEYS = [
 
 const geminiClients = GEMINI_API_KEYS.map((key) => new GoogleGenerativeAI(key));
 
-function safeJsonParse(text) {
+function extractJsonText(raw, expectedType = "object") {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+
+  const fencedMatch =
+    text.match(/```json\s*([\s\S]*?)```/i) ||
+    text.match(/```\s*([\s\S]*?)```/i);
+
+  const source = fencedMatch?.[1] ? fencedMatch[1].trim() : text;
+  if (!source) return "";
+
+  const openChar = expectedType === "array" ? "[" : "{";
+  const closeChar = expectedType === "array" ? "]" : "}";
+  const firstIndex = source.indexOf(openChar);
+  const lastIndex = source.lastIndexOf(closeChar);
+
+  if (firstIndex !== -1 && lastIndex !== -1 && lastIndex > firstIndex) {
+    return source.slice(firstIndex, lastIndex + 1).trim();
+  }
+
+  return source;
+}
+
+function safeJsonParse(text, expectedType = "object") {
+  const cleaned = extractJsonText(text, expectedType);
+  if (!cleaned) return null;
+
   try {
-    return JSON.parse(String(text || "").trim().replace(/```json\s*/gi, "").replace(/```/g, ""));
+    return JSON.parse(cleaned);
   } catch {
     return null;
   }
@@ -101,13 +127,59 @@ async function generateAssistantJson(prompt) {
 
         const result = await model.generateContent(prompt);
         const text = result?.response?.text?.() || "";
-        const parsed = safeJsonParse(text);
-        if (parsed) return parsed;
+        const parsed = safeJsonParse(text, "object");
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return {
+            message: String(parsed.message || "I can help with that."),
+            actions: Array.isArray(parsed.actions) ? parsed.actions : [],
+            suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
+          };
+        }
+        if (String(text || "").trim()) {
+          return {
+            message: String(text).trim(),
+            actions: [],
+            suggestions: [],
+          };
+        }
       } catch (error) {
         const message = String(error?.message || "");
         const retryable = message.includes("404") || message.includes("429") || message.includes("quota");
         if (!retryable) {
           console.error("Assistant Gemini error:", error);
+          break;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+async function generateRecommendationJson(prompt) {
+  if (!geminiClients.length) return null;
+
+  for (const client of geminiClients) {
+    for (const modelName of GEMINI_MODEL_CHAIN) {
+      try {
+        const model = client.getGenerativeModel({
+          model: modelName,
+          generationConfig: {
+            temperature: 0.85,
+            maxOutputTokens: 600,
+            responseMimeType: "application/json",
+          },
+        });
+
+        const result = await model.generateContent(prompt);
+        const text = result?.response?.text?.() || "";
+        const parsed = safeJsonParse(text, "array");
+        if (Array.isArray(parsed)) return parsed;
+      } catch (error) {
+        const message = String(error?.message || "");
+        const retryable = message.includes("404") || message.includes("429") || message.includes("quota");
+        if (!retryable) {
+          console.error("Recommendation Gemini error:", error);
           break;
         }
       }
@@ -139,7 +211,7 @@ Return exactly valid JSON as an array of 3 items.
 Each item must be: {"id":"menu id","name":"item name","price":123,"reason":"short reason"}
 `;
 
-    const recommendations = await generateAssistantJson(prompt);
+    const recommendations = await generateRecommendationJson(prompt);
     return res.json({ recommendations: Array.isArray(recommendations) ? recommendations : [] });
   } catch (err) {
     console.error(err);
@@ -160,13 +232,7 @@ router.post("/assistant", auth, async (req, res) => {
     const normalizedMenu = normalizeMenuItems(menu);
 
     const response = await generateAssistantJson(`${prompt}\n\nUser: "${message}"`);
-    if (response && typeof response === "object") {
-      return res.json({
-        message: String(response.message || "I can help with that."),
-        actions: Array.isArray(response.actions) ? response.actions : [],
-        suggestions: Array.isArray(response.suggestions) ? response.suggestions : [],
-      });
-    }
+    if (response) return res.json(response);
 
     return res.json(buildAssistantFallback(message, normalizedMenu));
   } catch (err) {
