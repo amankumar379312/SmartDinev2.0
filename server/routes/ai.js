@@ -5,8 +5,8 @@ const auth = require("../middleware/auth");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const GEMINI_MODEL_CHAIN = [
-  process.env.GEMINI_MODEL || "gemini-3.1-flash-lite-preview",
-  "gemini-2.5-flash",
+  process.env.GEMINI_MODEL || "gemini-2.5-flash",
+  "gemini-3.1-flash-lite-preview",
   "gemini-2.0-flash",
   "gemini-1.5-flash",
 ].filter((model, index, list) => model && list.indexOf(model) === index);
@@ -175,9 +175,9 @@ async function generateAssistantJson(prompt) {
   if (!geminiClients.length) return null;
 
   let attempts = 0;
-  for (let clientIndex = 0; clientIndex < geminiClients.length; clientIndex += 1) {
-    const client = geminiClients[clientIndex];
-    for (const modelName of GEMINI_MODEL_CHAIN) {
+  for (const modelName of GEMINI_MODEL_CHAIN) {
+    for (let clientIndex = 0; clientIndex < geminiClients.length; clientIndex += 1) {
+      const client = geminiClients[clientIndex];
       if (attempts >= AI_MAX_MODEL_ATTEMPTS) {
         console.log(`[AI:assistant] final=attempt_limit_reached maxAttempts=${AI_MAX_MODEL_ATTEMPTS}`);
         return null;
@@ -278,9 +278,9 @@ async function generateRecommendationJson(prompt) {
   if (!geminiClients.length) return null;
 
   let attempts = 0;
-  for (let clientIndex = 0; clientIndex < geminiClients.length; clientIndex += 1) {
-    const client = geminiClients[clientIndex];
-    for (const modelName of GEMINI_MODEL_CHAIN) {
+  for (const modelName of GEMINI_MODEL_CHAIN) {
+    for (let clientIndex = 0; clientIndex < geminiClients.length; clientIndex += 1) {
+      const client = geminiClients[clientIndex];
       if (attempts >= AI_MAX_MODEL_ATTEMPTS) {
         console.log(`[AI:recommend] final=attempt_limit_reached maxAttempts=${AI_MAX_MODEL_ATTEMPTS}`);
         return null;
