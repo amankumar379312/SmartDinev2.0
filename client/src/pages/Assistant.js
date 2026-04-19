@@ -332,10 +332,7 @@ function normalizeAiResponse(payload, userText = "", menuNames = []) {
     return [action];
   });
 
-  const inferredActions = inferActionsFromText(
-    `${userText} ${typeof source.message === "string" ? source.message : ""}`,
-    menuNames
-  );
+  const inferredActions = inferActionsFromText(userText, menuNames);
 
   const mergedActions = [...normalizedActions];
   inferredActions.forEach((action) => {
@@ -751,7 +748,7 @@ function VoiceMode({
     setReply(msg);
     speak(msg, () => setPhase("idle"));
     setPhase("speaking");
-  }, [initSession, name]);
+  }, [initSession, name, speak]);
 
   const speak = useCallback((text, onEnd) => {
     if (!window.speechSynthesis) { onEnd?.(); return; }

@@ -314,6 +314,7 @@ function buildBudgetResponse(userMessage, menuItems) {
 function buildResponseFromPlainText(rawText, userMessage, menuItems) {
   const text = String(rawText || "").trim();
   if (!text) return null;
+  const normalizedUserMessage = normalizePlainText(userMessage);
 
   const dietaryResponse = buildDietaryResponse(`${userMessage} ${text}`, menuItems);
   if (dietaryResponse) return dietaryResponse;
@@ -324,7 +325,7 @@ function buildResponseFromPlainText(rawText, userMessage, menuItems) {
   const normalizedRaw = normalizePlainText(text);
   if (!normalizedRaw) return null;
 
-  if (/\bmenu\b/.test(normalizedRaw)) {
+  if (/\b(show|open|see|browse)\b.*\bmenu\b|\bfull menu\b/i.test(normalizedUserMessage)) {
     return {
       message: "Certainly. I can open the menu so you can browse everything available right now.",
       actions: [{ type: "show_menu" }],
@@ -332,7 +333,7 @@ function buildResponseFromPlainText(rawText, userMessage, menuItems) {
     };
   }
 
-  if (/\bcart|checkout|bill\b/.test(normalizedRaw)) {
+  if (/\b(cart|basket|checkout|bill)\b/i.test(normalizedUserMessage)) {
     return {
       message: "I can open your cart so you can review the order and total.",
       actions: [{ type: "open_cart" }],
@@ -484,6 +485,7 @@ STRICT RULES:
 - Keep suggestions short, relevant, and grounded in MENU/cart context.
 - If uncertain, ask a clarifying question using message and ask_choice.
 - If the guest says something casual or random, respond in a friendly human way and gently steer the conversation back toward menu help or ordering.
+- Do not return show_menu or open_cart unless the guest explicitly asked to open/show the menu/cart/bill.
 
 CONTEXT:
 Guest=${guestName || "Guest"}
