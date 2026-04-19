@@ -265,6 +265,25 @@ function dedupeMenuItems(items) {
   });
 }
 
+function classifyAssistantIntent(message, menuItems) {
+  const normalized = normalizePlainText(message);
+  const menuMentions = inferMenuMentions(message, menuItems);
+
+  if (/\b(show|open|see|browse)\b.*\bmenu\b|\bfull menu\b/i.test(normalized)) return "open_menu";
+  if (/\b(cart|basket|checkout|bill)\b/i.test(normalized)) return "open_cart";
+  if (/\b(place order|confirm order|checkout now|order now)\b/i.test(normalized)) return "place_order";
+  if (extractBudget(message)) return "budget";
+  if (detectDietaryProfile(message) && Object.values(detectDietaryProfile(message)).some(Boolean)) return "dietary";
+  if (menuMentions.length && /\b(add|order|want|have|get|bring|give|take|remove|delete)\b/.test(normalized)) {
+    return "item_action";
+  }
+  if (/\b(recommend|suggest|best|what should i|what can i|top pick|chef|special)\b/.test(normalized)) return "recommendation";
+  if (/\b(hi|hello|hey|yo|hola|good morning|good afternoon|good evening|thanks|thank you|awesome|great|nice|cool|love that|joke|funny|bored|surprise me|random)\b/.test(normalized)) {
+    return "smalltalk";
+  }
+  return menuMentions.length ? "menu_query" : "general";
+}
+
 function buildRelevantMenuItems(userMessage, menuItems, cartItems) {
   const directMentions = inferMenuMentions(userMessage, menuItems);
   const budget = extractBudget(userMessage);
@@ -288,11 +307,13 @@ function buildRelevantMenuItems(userMessage, menuItems, cartItems) {
 
 function buildAssistantContext({ message, guestName, tableId, cartItems, menuItems }) {
   const relevantMenuItems = buildRelevantMenuItems(message, menuItems, cartItems);
+  const intent = classifyAssistantIntent(message, menuItems);
   return {
     guestName: guestName || "Guest",
     tableId: tableId || "walkin",
     message: String(message || "").trim(),
     normalizedMessage: normalizePlainText(message),
+    intent,
     cart: buildCartSummary(cartItems),
     menuOverview: {
       totalItems: menuItems.length,
@@ -434,6 +455,55 @@ function buildDirectItemIntent(context, menuItems) {
   };
 }
 
+function buildRecommendationResponse(context) {
+  const picks = context.relevantMenuItems.slice(0, 3);
+  if (!picks.length) return null;
+
+  const primary = picks[0];
+  const extras = picks.slice(1).map((item) => `${item.name} at Rs ${item.price}`);
+  const extraText = extras.length ? ` You could also look at ${extras.join(" or ")}.` : "";
+
+  return {
+    message: `${primary.name} at Rs ${primary.price} is my top pick for you right now.${extraText}`.trim(),
+    actions: [],
+    suggestions: picks.map((item) => item.name),
+  };
+}
+
+function buildSmalltalkResponse(context) {
+  if (/\b(thank|thanks|awesome|great|nice|cool|love that)\b/.test(context.normalizedMessage)) {
+    return {
+      message: "Always happy to help. Tell me if you want a quick recommendation, a budget pick, or help with your cart.",
+      actions: [],
+      suggestions: ["Chef's pick", "Budget picks", "My cart"],
+    };
+  }
+
+  if (/\b(joke|funny|bored|surprise me|random)\b/.test(context.normalizedMessage)) {
+    return {
+      message: "Let me keep it simple and tasty. Tell me whether you want something spicy, light, or filling, and I’ll narrow it down properly.",
+      actions: [],
+      suggestions: ["Something spicy", "Light meal", "Chef's pick"],
+    };
+  }
+
+  return {
+    message: "I’m here and ready. Tell me your budget, the kind of dish you want, or a menu item, and I’ll keep it easy.",
+    actions: [],
+    suggestions: ["Chef's pick", "Budget picks", "Full menu"],
+  };
+}
+
+function buildIntentFallback(context) {
+  if (context.intent === "recommendation" || context.intent === "menu_query") {
+    return buildRecommendationResponse(context);
+  }
+  if (context.intent === "smalltalk" || context.intent === "general") {
+    return buildSmalltalkResponse(context);
+  }
+  return null;
+}
+
 function resolveDeterministicIntent(context, menuItems) {
   const directItemIntent = buildDirectItemIntent(context, menuItems);
   if (directItemIntent) return directItemIntent;
@@ -460,7 +530,7 @@ function resolveDeterministicIntent(context, menuItems) {
     };
   }
 
-  return null;
+  return buildIntentFallback(context);
 }
 
 function buildResponseFromPlainText(rawText, context, menuItems) {
@@ -567,18 +637,50 @@ function sanitizeAssistantResponse(parsed, menuItems) {
   };
 }
 
+function responseLooksWeak(response, context) {
+  if (!response || typeof response !== "object") return true;
+
+  const message = String(response.message || "").trim();
+  if (!message) return true;
+
+  const normalized = normalizePlainText(message);
+  const genericPatterns = [
+    /\bi can help with that\b/,
+    /\btell me more\b/,
+    /\bbased on your preferences\b/,
+    /\blet me know what you want\b/,
+    /\bi can assist\b/,
+    /\bi didn t get that\b/,
+  ];
+
+  if (genericPatterns.some((pattern) => pattern.test(normalized))) return true;
+  if (message.length > 220) return true;
+
+  const mentionsKnownItem = context.relevantMenuItems.some((item) =>
+    normalized.includes(normalizePlainText(item.name))
+  );
+  const hasMeaningfulActions = Array.isArray(response.actions) && response.actions.length > 0;
+
+  if (["budget", "dietary", "recommendation", "menu_query"].includes(context.intent) && !mentionsKnownItem && !hasMeaningfulActions) {
+    return true;
+  }
+
+  return false;
+}
+
 function tryParseAssistantResponse(rawText, menuItems, context) {
   const strictParsed = sanitizeAssistantResponse(safeJsonParse(rawText, "object"), menuItems);
-  if (strictParsed) return strictParsed;
+  if (strictParsed && !responseLooksWeak(strictParsed, context)) return strictParsed;
 
   const repairedParsed = sanitizeAssistantResponse(safeJsonParseLenient(rawText, "object"), menuItems);
-  if (repairedParsed) return repairedParsed;
+  if (repairedParsed && !responseLooksWeak(repairedParsed, context)) return repairedParsed;
 
   return buildResponseFromPlainText(rawText, context, menuItems);
 }
 
 function buildAssistantPrompt(context) {
   const compactContext = JSON.stringify({
+    intent: context.intent,
     guest: context.guestName,
     table: context.tableId,
     userMessage: context.message,
@@ -634,6 +736,9 @@ STRICT RULES:
 - Do not return show_menu or open_cart unless the guest explicitly asked to open/show the menu/cart/bill.
 - Use RELEVANT_MENU_ITEMS and MENU_OVERVIEW as the source of truth for recommendations. If something is not in context, do not invent it.
 - Prefer concise waiter replies with one clear next step.
+- Keep the reply to the point. Usually 1 sentence, at most 2 short sentences.
+- For recommendation, budget, and dietary intents, mention exact relevant menu items or prices from context. Do not answer vaguely.
+- If your draft would be generic, replace it with a sharper recommendation or one short clarifying question.
 
 CONTEXT:
 ${compactContext}
