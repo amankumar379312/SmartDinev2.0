@@ -120,6 +120,14 @@ function safeJsonParse(raw, expectedType = "object") {
   }
 }
 
+function looksLikeBrokenStructuredText(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  if (/^[{\[]/.test(text)) return true;
+  if (/^"?message"?\s*:|^"?actions"?\s*:|^"?suggestions"?\s*:/i.test(text)) return true;
+  return false;
+}
+
 function normalizeQuantity(value) {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
     return Math.max(1, Math.min(20, Math.round(value)));
@@ -291,6 +299,9 @@ function normalizeAiResponse(payload, userText = "", menuNames = []) {
   const rawActions = Array.isArray(source.actions) ? source.actions : [];
   const rawSuggestions = Array.isArray(source.suggestions) ? source.suggestions : [];
   const fallbackMessage = typeof source.message === "string" ? source.message : "";
+  const safeMessage = looksLikeBrokenStructuredText(fallbackMessage)
+    ? "I didn't get that cleanly. Tell me the dish, budget, or mood you're after, and I'll help properly."
+    : fallbackMessage;
 
   const normalizedActions = rawActions.flatMap((action) => {
     if (!action || typeof action !== "object") return [];
@@ -348,7 +359,7 @@ function normalizeAiResponse(payload, userText = "", menuNames = []) {
     .slice(0, 4);
 
   return {
-    message: fallbackMessage || "I can help with that.",
+    message: safeMessage || "I can help with that.",
     actions: mergedActions,
     suggestions: dedupedSuggestions.length ? dedupedSuggestions : ["Full menu", "My cart"],
   };

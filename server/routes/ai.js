@@ -184,6 +184,14 @@ function normalizePlainText(value) {
     .trim();
 }
 
+function looksLikeBrokenStructuredText(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  if (/^[{\[]/.test(text)) return true;
+  if (/^"?message"?\s*:|^"?actions"?\s*:|^"?suggestions"?\s*:/i.test(text)) return true;
+  return false;
+}
+
 function extractBudget(text) {
   const source = String(text || "").toLowerCase();
   const rsMatch = source.match(/(?:under|below|within|budget|around|less than|max(?:imum)? of?)\s*(?:rs\.?|rupees?|₹)?\s*(\d{2,5})/i);
@@ -344,14 +352,21 @@ function buildResponseFromPlainText(rawText, userMessage, menuItems) {
   const mentions = inferMenuMentions(`${text} ${userMessage}`, menuItems);
   if (mentions.length) {
     return {
-      message: text,
+      message: looksLikeBrokenStructuredText(text)
+        ? `I caught the intent, but that reply came back in a messy format. I can still help you with ${mentions
+          .slice(0, 3)
+          .map((item) => item.name)
+          .join(", ")}.`
+        : text,
       actions: mentions.slice(0, 3).map((item) => ({ type: "add_to_cart", item: item.name, qty: 1 })),
       suggestions: mentions.slice(0, 3).map((item) => item.name),
     };
   }
 
   return {
-    message: text,
+    message: looksLikeBrokenStructuredText(text)
+      ? "I didn't get a clean reply there. Tell me what you'd like to eat, your budget, or the kind of dish you want, and I'll guide you properly."
+      : text,
     actions: [],
     suggestions: ["Full menu", "My cart"],
   };
@@ -416,7 +431,7 @@ function sanitizeAssistantResponse(parsed, menuItems) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
 
   const message = String(parsed.message || "").trim();
-  if (!message) return null;
+  if (!message || looksLikeBrokenStructuredText(message)) return null;
 
   return {
     message,
