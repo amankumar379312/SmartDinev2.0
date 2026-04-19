@@ -23,6 +23,15 @@ const GEMINI_API_KEYS = [
 
 const geminiClients = GEMINI_API_KEYS.map((key) => new GoogleGenerativeAI(key));
 
+function summarizeError(error) {
+  const status = Number(error?.status || 0);
+  const message = String(error?.message || "").trim();
+  return {
+    status: status || null,
+    message: message || "Unknown error",
+  };
+}
+
 function extractJsonText(raw, expectedType = "object") {
   const text = String(raw || "").trim();
   if (!text) return "";
@@ -82,6 +91,23 @@ function isRetryableGeminiError(error) {
   );
 }
 
+function logAiAttempt(scope, details) {
+  const parts = [
+    `[AI:${scope}]`,
+    `key=${details.keyIndex}`,
+    `model=${details.modelName}`,
+    `stage=${details.stage}`,
+  ];
+
+  if (details.durationMs != null) parts.push(`durationMs=${details.durationMs}`);
+  if (details.rawLength != null) parts.push(`rawLength=${details.rawLength}`);
+  if (details.retryable != null) parts.push(`retryable=${details.retryable}`);
+  if (details.reason) parts.push(`reason=${details.reason}`);
+  if (details.status != null) parts.push(`status=${details.status}`);
+
+  console.log(parts.join(" "));
+}
+
 function normalizeMenuItems(menu) {
   return menu.map((item) => ({
     id: String(item._id),
@@ -138,9 +164,17 @@ function buildAssistantFallback(message, menuItems) {
 async function generateAssistantJson(prompt) {
   if (!geminiClients.length) return null;
 
-  for (const client of geminiClients) {
+  for (let clientIndex = 0; clientIndex < geminiClients.length; clientIndex += 1) {
+    const client = geminiClients[clientIndex];
     for (const modelName of GEMINI_MODEL_CHAIN) {
+      const startedAt = Date.now();
       try {
+        logAiAttempt("assistant", {
+          keyIndex: clientIndex + 1,
+          modelName,
+          stage: "request_started",
+        });
+
         const model = client.getGenerativeModel({
           model: modelName,
           generationConfig: {
@@ -152,15 +186,44 @@ async function generateAssistantJson(prompt) {
 
         const result = await model.generateContent(prompt);
         const text = result?.response?.text?.() || "";
+        logAiAttempt("assistant", {
+          keyIndex: clientIndex + 1,
+          modelName,
+          stage: "response_received",
+          durationMs: Date.now() - startedAt,
+          rawLength: text.length,
+        });
+
         const parsed = safeJsonParse(text, "object");
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          logAiAttempt("assistant", {
+            keyIndex: clientIndex + 1,
+            modelName,
+            stage: "parse_success",
+            durationMs: Date.now() - startedAt,
+          });
           return {
             message: String(parsed.message || "I can help with that."),
             actions: Array.isArray(parsed.actions) ? parsed.actions : [],
             suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
           };
         }
+
+        logAiAttempt("assistant", {
+          keyIndex: clientIndex + 1,
+          modelName,
+          stage: "parse_failed",
+          durationMs: Date.now() - startedAt,
+          reason: "non_json_or_unexpected_shape",
+        });
+
         if (String(text || "").trim()) {
+          logAiAttempt("assistant", {
+            keyIndex: clientIndex + 1,
+            modelName,
+            stage: "plain_text_returned",
+            durationMs: Date.now() - startedAt,
+          });
           return {
             message: String(text).trim(),
             actions: [],
@@ -168,7 +231,19 @@ async function generateAssistantJson(prompt) {
           };
         }
       } catch (error) {
-        if (!isRetryableGeminiError(error)) {
+        const retryable = isRetryableGeminiError(error);
+        const summary = summarizeError(error);
+        logAiAttempt("assistant", {
+          keyIndex: clientIndex + 1,
+          modelName,
+          stage: "request_failed",
+          durationMs: Date.now() - startedAt,
+          retryable,
+          status: summary.status,
+          reason: summary.message,
+        });
+
+        if (!retryable) {
           console.error("Assistant Gemini error:", error);
           break;
         }
@@ -182,9 +257,17 @@ async function generateAssistantJson(prompt) {
 async function generateRecommendationJson(prompt) {
   if (!geminiClients.length) return null;
 
-  for (const client of geminiClients) {
+  for (let clientIndex = 0; clientIndex < geminiClients.length; clientIndex += 1) {
+    const client = geminiClients[clientIndex];
     for (const modelName of GEMINI_MODEL_CHAIN) {
+      const startedAt = Date.now();
       try {
+        logAiAttempt("recommend", {
+          keyIndex: clientIndex + 1,
+          modelName,
+          stage: "request_started",
+        });
+
         const model = client.getGenerativeModel({
           model: modelName,
           generationConfig: {
@@ -196,10 +279,46 @@ async function generateRecommendationJson(prompt) {
 
         const result = await model.generateContent(prompt);
         const text = result?.response?.text?.() || "";
+        logAiAttempt("recommend", {
+          keyIndex: clientIndex + 1,
+          modelName,
+          stage: "response_received",
+          durationMs: Date.now() - startedAt,
+          rawLength: text.length,
+        });
+
         const parsed = safeJsonParse(text, "array");
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          logAiAttempt("recommend", {
+            keyIndex: clientIndex + 1,
+            modelName,
+            stage: "parse_success",
+            durationMs: Date.now() - startedAt,
+          });
+          return parsed;
+        }
+
+        logAiAttempt("recommend", {
+          keyIndex: clientIndex + 1,
+          modelName,
+          stage: "parse_failed",
+          durationMs: Date.now() - startedAt,
+          reason: "non_json_or_unexpected_shape",
+        });
       } catch (error) {
-        if (!isRetryableGeminiError(error)) {
+        const retryable = isRetryableGeminiError(error);
+        const summary = summarizeError(error);
+        logAiAttempt("recommend", {
+          keyIndex: clientIndex + 1,
+          modelName,
+          stage: "request_failed",
+          durationMs: Date.now() - startedAt,
+          retryable,
+          status: summary.status,
+          reason: summary.message,
+        });
+
+        if (!retryable) {
           console.error("Recommendation Gemini error:", error);
           break;
         }
@@ -253,8 +372,12 @@ router.post("/assistant", auth, async (req, res) => {
     const normalizedMenu = normalizeMenuItems(menu);
 
     const response = await generateAssistantJson(`${prompt}\n\nUser: "${message}"`);
-    if (response) return res.json(response);
+    if (response) {
+      console.log("[AI:assistant] final=ai_response");
+      return res.json(response);
+    }
 
+    console.log("[AI:assistant] final=fallback_response");
     return res.json(buildAssistantFallback(message, normalizedMenu));
   } catch (err) {
     console.error("Assistant route failed:", err);
