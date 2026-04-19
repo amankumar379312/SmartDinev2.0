@@ -70,6 +70,7 @@ button:disabled{opacity:0.45;cursor:not-allowed;}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const MODEL_CHAIN = [];
 
+
 // ════════════════════════════════════════════════════════
 // MODE TOGGLE BUTTON
 // ════════════════════════════════════════════════════════
@@ -306,6 +307,7 @@ Rules: Only real menu items. On "add X" always add_to_cart. Suggest pairings. 2-
     isCartOpen, setIsCartOpen,
     isMenuOpen, setIsMenuOpen,
     toastItem,
+    legacyAskAIWithRetry: askAIWithRetry,
     initSession, askAIWithRetry: askAIServer, buildPrompt,
     onToggleMode: () => setMode((m) => m === "voice" ? "chat" : "voice"),
     currentTableId,
