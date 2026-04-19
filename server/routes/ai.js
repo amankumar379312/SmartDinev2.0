@@ -23,6 +23,14 @@ const GEMINI_API_KEYS = [
 
 const geminiClients = GEMINI_API_KEYS.map((key) => new GoogleGenerativeAI(key));
 
+function getPositiveInt(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const AI_REQUEST_TIMEOUT_MS = getPositiveInt(process.env.AI_REQUEST_TIMEOUT_MS, 8000);
+const AI_MAX_MODEL_ATTEMPTS = getPositiveInt(process.env.AI_MAX_MODEL_ATTEMPTS, 4);
+
 function summarizeError(error) {
   const status = Number(error?.status || 0);
   const message = String(error?.message || "").trim();
@@ -87,7 +95,9 @@ function isRetryableGeminiError(error) {
     message.includes("rate limit") ||
     message.includes("service unavailable") ||
     message.includes("high demand") ||
-    message.includes("temporarily unavailable")
+    message.includes("temporarily unavailable") ||
+    message.includes("timed out") ||
+    message.includes("aborted")
   );
 }
 
@@ -164,15 +174,23 @@ function buildAssistantFallback(message, menuItems) {
 async function generateAssistantJson(prompt) {
   if (!geminiClients.length) return null;
 
+  let attempts = 0;
   for (let clientIndex = 0; clientIndex < geminiClients.length; clientIndex += 1) {
     const client = geminiClients[clientIndex];
     for (const modelName of GEMINI_MODEL_CHAIN) {
+      if (attempts >= AI_MAX_MODEL_ATTEMPTS) {
+        console.log(`[AI:assistant] final=attempt_limit_reached maxAttempts=${AI_MAX_MODEL_ATTEMPTS}`);
+        return null;
+      }
+
+      attempts += 1;
       const startedAt = Date.now();
       try {
         logAiAttempt("assistant", {
           keyIndex: clientIndex + 1,
           modelName,
           stage: "request_started",
+          reason: `attempt=${attempts}/${AI_MAX_MODEL_ATTEMPTS}`,
         });
 
         const model = client.getGenerativeModel({
@@ -184,7 +202,9 @@ async function generateAssistantJson(prompt) {
           },
         });
 
-        const result = await model.generateContent(prompt);
+        const result = await model.generateContent(prompt, {
+          timeout: AI_REQUEST_TIMEOUT_MS,
+        });
         const text = result?.response?.text?.() || "";
         logAiAttempt("assistant", {
           keyIndex: clientIndex + 1,
@@ -257,15 +277,23 @@ async function generateAssistantJson(prompt) {
 async function generateRecommendationJson(prompt) {
   if (!geminiClients.length) return null;
 
+  let attempts = 0;
   for (let clientIndex = 0; clientIndex < geminiClients.length; clientIndex += 1) {
     const client = geminiClients[clientIndex];
     for (const modelName of GEMINI_MODEL_CHAIN) {
+      if (attempts >= AI_MAX_MODEL_ATTEMPTS) {
+        console.log(`[AI:recommend] final=attempt_limit_reached maxAttempts=${AI_MAX_MODEL_ATTEMPTS}`);
+        return null;
+      }
+
+      attempts += 1;
       const startedAt = Date.now();
       try {
         logAiAttempt("recommend", {
           keyIndex: clientIndex + 1,
           modelName,
           stage: "request_started",
+          reason: `attempt=${attempts}/${AI_MAX_MODEL_ATTEMPTS}`,
         });
 
         const model = client.getGenerativeModel({
@@ -277,7 +305,9 @@ async function generateRecommendationJson(prompt) {
           },
         });
 
-        const result = await model.generateContent(prompt);
+        const result = await model.generateContent(prompt, {
+          timeout: AI_REQUEST_TIMEOUT_MS,
+        });
         const text = result?.response?.text?.() || "";
         logAiAttempt("recommend", {
           keyIndex: clientIndex + 1,
