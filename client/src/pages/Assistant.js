@@ -123,7 +123,7 @@ function safeJsonParse(raw, expectedType = "object") {
 function looksLikeBrokenStructuredText(value) {
   const text = String(value || "").trim();
   if (!text) return false;
-  if (/^[{\[]/.test(text)) return true;
+  if (/^[[{]/.test(text)) return true;
   if (/^"?message"?\s*:|^"?actions"?\s*:|^"?suggestions"?\s*:/i.test(text)) return true;
   return false;
 }
