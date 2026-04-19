@@ -48,6 +48,7 @@ export default function WaiterDashboard() {
   const [confirmCleanOpen, setConfirmCleanOpen] = useState(null);
   const [confirmServeOpen, setConfirmServeOpen] = useState(null);
   const [confirmCashOpen, setConfirmCashOpen] = useState(null);
+  const [infoPopup, setInfoPopup] = useState(null);
 
   const normalize = (s) => String(s || "").toLowerCase();
 
@@ -217,7 +218,10 @@ export default function WaiterDashboard() {
       fetchAllTables();
     } catch (e) {
       console.error("Failed to clear table:", e);
-      alert(e?.response?.data?.msg || "Could not clear table.");
+      setInfoPopup({
+        title: "Table Cannot Be Cleared",
+        message: e?.response?.data?.msg || "Could not clear table.",
+      });
     } finally {
       setConfirmCleanOpen(null);
     }
@@ -251,7 +255,10 @@ export default function WaiterDashboard() {
       fetchOrders();
     } catch (e) {
       console.error("Failed to mark cash received", e);
-      alert(e?.response?.data?.message || "Could not record cash payment.");
+      setInfoPopup({
+        title: "Cash Payment Failed",
+        message: e?.response?.data?.message || "Could not record cash payment.",
+      });
     } finally {
       setConfirmCashOpen(null);
     }
@@ -747,6 +754,8 @@ export default function WaiterDashboard() {
                   const tId = table.tableId || `T-${String(table.number).padStart(2, "0")}`;
                   const hasPending = waiterCalls.some(c => c.tableId === tId && !c.accepted);
                   const needsClean = cleanRequests.some(c => c.tableId === tId && !c.done);
+                  const billReady = billReadyTables.find((entry) => entry.tableNo === tId);
+                  const canAcceptCash = Boolean(billReady?.orderIds?.length);
 
                   return (
                     <div
@@ -757,6 +766,8 @@ export default function WaiterDashboard() {
                         min-h-[110px] sm:min-h-[120px] 
                         ${needsClean
                           ? "bg-violet-900/30 border border-violet-500/70 shadow-[0_0_15px_rgba(139,92,246,0.3)] animate-pulse"
+                          : canAcceptCash
+                            ? "bg-emerald-900/20 border border-emerald-500/70 shadow-[0_0_15px_rgba(16,185,129,0.22)]"
                           : hasPending
                             ? "bg-red-900/30 border border-red-500/70 shadow-[0_0_15px_rgba(239,68,68,0.3)] animate-pulse"
                             : isAvailable ? "bg-slate-900/80 border border-green-500/60 hover:brightness-110 hover:-translate-y-0.5"
@@ -769,6 +780,10 @@ export default function WaiterDashboard() {
                       {needsClean ? (
                         <div className="absolute -top-2 -right-2 w-6 h-6 bg-violet-500 rounded-full flex items-center justify-center shadow-lg z-10">
                           <Sparkles className="w-3.5 h-3.5 text-white" />
+                        </div>
+                      ) : canAcceptCash ? (
+                        <div className="absolute -top-2 -right-2 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg z-10">
+                          <Receipt className="w-3.5 h-3.5 text-white" />
                         </div>
                       ) : hasPending ? (
                         <div className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center shadow-lg z-10">
@@ -808,6 +823,8 @@ export default function WaiterDashboard() {
                           <span>{table.seats ? `${table.seats} Seats` : "4 Seats"}</span>
                           {needsClean ? (
                             <span className="text-violet-300">To Clean</span>
+                          ) : canAcceptCash ? (
+                            <span className="text-emerald-300">Cash Due</span>
                           ) : hasPending ? (
                             <span className="text-red-300">Calling</span>
                           ) : isAvailable ? (
@@ -820,11 +837,20 @@ export default function WaiterDashboard() {
                         </div>
                       </div>
 
-                      {/* Clean Button */}
+                      {canAcceptCash && (
+                        <button
+                          onClick={() => markCashReceived(billReady)}
+                          className="w-full mt-3 py-1.5 px-3 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/50 text-emerald-300 text-[10px] font-bold uppercase tracking-wider rounded-lg flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                        >
+                          <Receipt className="w-3 h-3" />
+                          Accept Cash
+                        </button>
+                      )}
+
                       {(isOccupied || isHeld || needsClean) && (
                         <button
                           onClick={() => handleCleanClick(table)}
-                          className="w-full mt-3 py-1.5 px-3 bg-slate-800/80 hover:bg-emerald-900/50 border border-slate-600/50 hover:border-emerald-500/60 text-slate-300 hover:text-emerald-300 text-[10px] font-bold uppercase tracking-wider rounded-lg flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                          className="w-full mt-2 py-1.5 px-3 bg-slate-800/80 hover:bg-emerald-900/50 border border-slate-600/50 hover:border-emerald-500/60 text-slate-300 hover:text-emerald-300 text-[10px] font-bold uppercase tracking-wider rounded-lg flex items-center justify-center gap-1.5 transition-all active:scale-95"
                         >
                           <Sparkles className="w-3 h-3" />
                           Clean Table
@@ -924,6 +950,24 @@ export default function WaiterDashboard() {
                 <Check className="w-4 h-4 stroke-[3]" /> Confirm
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {infoPopup && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center">
+            <div className="w-16 h-16 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-4 outline outline-8 outline-orange-500/5">
+              <BellRing className="w-8 h-8 text-orange-400" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">{infoPopup.title}</h3>
+            <p className="text-sm text-slate-400 mb-6">{infoPopup.message}</p>
+            <button
+              onClick={() => setInfoPopup(null)}
+              className="w-full px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl shadow-lg shadow-orange-500/30 transition-all"
+            >
+              OK
+            </button>
           </div>
         </div>
       )}

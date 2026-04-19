@@ -596,7 +596,9 @@ Rules: Only real menu items. For quantity requests like "3 fish curry" or "two b
     try {
       const { data } = await API.post("/ai/assistant", {
         message: text,
-        prompt: buildPrompt(cartSnap),
+        guestName: user?.name || "Guest",
+        tableId: currentTableId,
+        cart: Array.isArray(cartSnap) ? cartSnap : [],
       });
       return normalizeAiResponse(data, text, menuNames);
     } catch (error) {
@@ -607,7 +609,7 @@ Rules: Only real menu items. For quantity requests like "3 fish curry" or "two b
         suggestions: ["Full menu", "My cart"],
       };
     }
-  }, [buildPrompt, menuNames]);
+  }, [currentTableId, menuNames, user]);
 
   // ── SHARED ─────────────────────────────────────
   const shared = {
@@ -656,9 +658,26 @@ function VoiceMode({
   const [reply, setReply] = useState("");
   const recogRef = useRef(null);
   const voiceRef = useRef(null);
+  const voiceKeyRef = useRef("");
   const hasSpeech = "SpeechRecognition" in window || "webkitSpeechRecognition" in window;
   const cartRef = useRef(cart);
   useEffect(() => { cartRef.current = cart; }, [cart]);
+
+  const rankVoice = useCallback((voice) => {
+    const nameValue = String(voice?.name || "").toLowerCase();
+    const langValue = String(voice?.lang || "").toLowerCase();
+    let score = 0;
+
+    if (langValue.startsWith("en")) score += 40;
+    if (nameValue.includes("google uk english female")) score += 120;
+    if (/microsoft (zira|aria|jenny)/i.test(nameValue)) score += 110;
+    if (/samantha|victoria|karen|moira|susan/i.test(nameValue)) score += 100;
+    if (/female|woman|zira|aria|jenny|samantha|victoria|karen|moira|susan|ava|nova/i.test(nameValue)) score += 80;
+    if (nameValue.includes("google")) score += 30;
+    if (voice?.default) score += 5;
+
+    return score;
+  }, []);
 
   const pickPreferredVoice = useCallback(() => {
     if (!window.speechSynthesis) return null;
@@ -668,33 +687,33 @@ function VoiceMode({
 
     const englishVoices = voices.filter((voice) => /^en(-|_)/i.test(voice.lang) || voice.lang.toLowerCase().startsWith("en"));
     const pool = englishVoices.length ? englishVoices : voices;
-    const femaleHints = [
-      "female",
-      "woman",
-      "zira",
-      "aria",
-      "jenny",
-      "samantha",
-      "victoria",
-      "karen",
-      "moira",
-      "susan",
-      "ava",
-      "alloy",
-      "nova",
-    ];
+    const existingKey = voiceKeyRef.current;
+    if (existingKey) {
+      const existingVoice = pool.find((voice) => (voice.voiceURI || voice.name) === existingKey);
+      if (existingVoice) {
+        voiceRef.current = existingVoice;
+        return existingVoice;
+      }
+    }
 
-    const preferred =
-      pool.find((voice) => /google uk english female/i.test(voice.name)) ||
-      pool.find((voice) => /microsoft (zira|aria|jenny)/i.test(voice.name)) ||
-      pool.find((voice) => /samantha|victoria|karen|moira|susan/i.test(voice.name)) ||
-      pool.find((voice) => femaleHints.some((hint) => voice.name.toLowerCase().includes(hint))) ||
-      pool.find((voice) => /google/i.test(voice.name)) ||
-      pool[0];
-
+    const preferred = [...pool].sort((a, b) => rankVoice(b) - rankVoice(a))[0] || null;
     voiceRef.current = preferred || null;
+    voiceKeyRef.current = preferred ? (preferred.voiceURI || preferred.name) : "";
     return voiceRef.current;
-  }, []);
+  }, [rankVoice]);
+
+  const ensurePreferredVoice = useCallback(async () => {
+    const immediate = pickPreferredVoice();
+    if (immediate) return immediate;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await sleep(150);
+      const nextVoice = pickPreferredVoice();
+      if (nextVoice) return nextVoice;
+    }
+
+    return null;
+  }, [pickPreferredVoice]);
 
   useEffect(() => {
     if (!window.speechSynthesis) return undefined;
@@ -722,22 +741,29 @@ function VoiceMode({
     setPhase("speaking");
   }, [initSession, name]);
 
-  const speak = (text, onEnd) => {
+  const speak = useCallback((text, onEnd) => {
     if (!window.speechSynthesis) { onEnd?.(); return; }
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.92; u.pitch = 1.05;
-    const selectedVoice = voiceRef.current || pickPreferredVoice();
-    if (selectedVoice) {
-      u.voice = selectedVoice;
-      u.lang = selectedVoice.lang || "en-US";
-    } else {
-      u.lang = "en-US";
-    }
-    u.onstart = () => setPhase("speaking");
-    u.onend = () => { setPhase("idle"); onEnd?.(); };
-    window.speechSynthesis.speak(u);
-  };
+
+    (async () => {
+      const selectedVoice = voiceRef.current || await ensurePreferredVoice();
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 0.92;
+      u.pitch = 1.0;
+      if (selectedVoice) {
+        const latestVoices = window.speechSynthesis.getVoices();
+        const matchedVoice = latestVoices.find((voice) => (voice.voiceURI || voice.name) === voiceKeyRef.current) || selectedVoice;
+        voiceRef.current = matchedVoice;
+        u.voice = matchedVoice;
+        u.lang = matchedVoice.lang || "en-US";
+      } else {
+        u.lang = "en-US";
+      }
+      u.onstart = () => setPhase("speaking");
+      u.onend = () => { setPhase("idle"); onEnd?.(); };
+      window.speechSynthesis.speak(u);
+    })();
+  }, [ensurePreferredVoice]);
 
   const startListening = () => {
     if (!hasSpeech) return;

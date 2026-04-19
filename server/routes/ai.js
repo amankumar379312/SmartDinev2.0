@@ -30,6 +30,13 @@ function getPositiveInt(value, fallback) {
 
 const AI_REQUEST_TIMEOUT_MS = getPositiveInt(process.env.AI_REQUEST_TIMEOUT_MS, 8000);
 const AI_MAX_MODEL_ATTEMPTS = getPositiveInt(process.env.AI_MAX_MODEL_ATTEMPTS, 4);
+const ASSISTANT_TEMPERATURE = Number.isFinite(Number(process.env.AI_ASSISTANT_TEMPERATURE))
+  ? Number(process.env.AI_ASSISTANT_TEMPERATURE)
+  : 0.35;
+const RESTAURANT_CONTEXT = String(
+  process.env.RESTAURANT_CONTEXT ||
+  "SmartDine is a modern restaurant. Speak like a polite, attentive floor waiter: warm, confident, brief, helpful. Never invent menu items, prices, offers, ingredients, timing, or restaurant policies that are not provided."
+).trim();
 
 function summarizeError(error) {
   const status = Number(error?.status || 0);
@@ -128,6 +135,140 @@ function normalizeMenuItems(menu) {
   }));
 }
 
+function normalizeCartItems(cartItems = []) {
+  if (!Array.isArray(cartItems)) return [];
+  return cartItems
+    .map((item) => ({
+      name: String(item?.name || "").trim(),
+      qty: Math.max(1, Math.min(20, Number(item?.qty) || 1)),
+    }))
+    .filter((item) => item.name);
+}
+
+function buildMenuLookup(menuItems) {
+  return new Map(menuItems.map((item) => [item.name.toLowerCase(), item]));
+}
+
+function sanitizeSuggestions(suggestions) {
+  return (Array.isArray(suggestions) ? suggestions : [])
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .slice(0, 3);
+}
+
+function sanitizeAssistantActions(actions, menuItems) {
+  const menuLookup = buildMenuLookup(menuItems);
+  const sanitized = [];
+
+  for (const action of Array.isArray(actions) ? actions : []) {
+    if (!action || typeof action !== "object") continue;
+
+    const type = String(action.type || "").trim();
+    if (!["add_to_cart", "remove_from_cart", "show_menu", "place_order", "open_cart", "ask_choice"].includes(type)) {
+      continue;
+    }
+
+    if (type === "add_to_cart" || type === "remove_from_cart") {
+      const itemName = String(action.item || "").trim();
+      const menuMatch = menuLookup.get(itemName.toLowerCase());
+      if (!menuMatch) continue;
+      sanitized.push({
+        type,
+        item: menuMatch.name,
+        qty: Math.max(1, Math.min(20, Number(action.qty) || 1)),
+      });
+      continue;
+    }
+
+    if (type === "ask_choice") {
+      const options = (Array.isArray(action.options) ? action.options : [])
+        .map((option) => String(option || "").trim())
+        .filter(Boolean)
+        .slice(0, 3);
+      sanitized.push({ type, options });
+      continue;
+    }
+
+    sanitized.push({ type });
+  }
+
+  return sanitized;
+}
+
+function sanitizeAssistantResponse(parsed, menuItems) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+
+  const message = String(parsed.message || "").trim();
+  if (!message) return null;
+
+  return {
+    message,
+    actions: sanitizeAssistantActions(parsed.actions, menuItems),
+    suggestions: sanitizeSuggestions(parsed.suggestions),
+  };
+}
+
+function buildAssistantPrompt({ message, guestName, tableId, cartItems, menuItems }) {
+  const menuBlock = menuItems
+    .map((item) => `- ${item.name} | category=${item.category} | price=Rs ${item.price} | desc=${item.description || "NA"}`)
+    .join("\n");
+  const cartBlock = cartItems.length
+    ? cartItems.map((item) => `${item.name} x${item.qty}`).join(", ")
+    : "empty";
+
+  return `
+${RESTAURANT_CONTEXT}
+
+ROLE:
+You are Nova, the restaurant's AI waiter.
+
+GOALS:
+- Help the guest order from the provided menu only.
+- Keep a consistent waiter tone: warm, grounded, clear, not overexcited.
+- Engage naturally, but keep replies concise and useful.
+- Never hallucinate dishes, prices, ingredients, discounts, availability, or restaurant facts.
+- If the user asks about something not in the menu/context, say that clearly and guide them to valid options.
+
+RESPONSE FORMAT:
+Return ONLY one valid JSON object.
+No markdown, no code fences, no extra text.
+
+SCHEMA:
+{
+  "message": "1 or 2 waiter-style sentences",
+  "actions": [
+    {"type":"add_to_cart","item":"EXACT MENU NAME","qty":2},
+    {"type":"remove_from_cart","item":"EXACT MENU NAME","qty":1},
+    {"type":"show_menu"},
+    {"type":"open_cart"},
+    {"type":"place_order"},
+    {"type":"ask_choice","options":["A","B","C"]}
+  ],
+  "suggestions": ["short chip", "short chip", "short chip"]
+}
+
+STRICT RULES:
+- Use ONLY exact menu names from MENU.
+- Do not mention dishes that are not in MENU.
+- Only create add/remove actions for exact menu items.
+- If the guest says quantity, include qty as an integer.
+- If the guest mentions multiple menu items, include multiple actions.
+- Keep suggestions short, relevant, and grounded in MENU/cart context.
+- If uncertain, ask a clarifying question using message and ask_choice.
+
+CONTEXT:
+Guest=${guestName || "Guest"}
+Table=${tableId || "walkin"}
+Cart=${cartBlock}
+
+MENU:
+${menuBlock}
+
+USER MESSAGE:
+${message}
+`.trim();
+}
+
 function buildAssistantFallback(message, menuItems) {
   const text = String(message || "").toLowerCase();
   const actions = [];
@@ -171,8 +312,16 @@ function buildAssistantFallback(message, menuItems) {
   };
 }
 
-async function generateAssistantJson(prompt) {
+async function generateAssistantJson({ message, guestName, tableId, cartItems, menuItems }) {
   if (!geminiClients.length) return null;
+
+  const prompt = buildAssistantPrompt({
+    message,
+    guestName,
+    tableId,
+    cartItems,
+    menuItems,
+  });
 
   let attempts = 0;
   for (const modelName of GEMINI_MODEL_CHAIN) {
@@ -196,7 +345,7 @@ async function generateAssistantJson(prompt) {
         const model = client.getGenerativeModel({
           model: modelName,
           generationConfig: {
-            temperature: 0.85,
+            temperature: ASSISTANT_TEMPERATURE,
             maxOutputTokens: 600,
             responseMimeType: "application/json",
           },
@@ -214,19 +363,15 @@ async function generateAssistantJson(prompt) {
           rawLength: text.length,
         });
 
-        const parsed = safeJsonParse(text, "object");
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const parsed = sanitizeAssistantResponse(safeJsonParse(text, "object"), menuItems);
+        if (parsed) {
           logAiAttempt("assistant", {
             keyIndex: clientIndex + 1,
             modelName,
             stage: "parse_success",
             durationMs: Date.now() - startedAt,
           });
-          return {
-            message: String(parsed.message || "I can help with that."),
-            actions: Array.isArray(parsed.actions) ? parsed.actions : [],
-            suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
-          };
+          return parsed;
         }
 
         logAiAttempt("assistant", {
@@ -237,19 +382,6 @@ async function generateAssistantJson(prompt) {
           reason: "non_json_or_unexpected_shape",
         });
 
-        if (String(text || "").trim()) {
-          logAiAttempt("assistant", {
-            keyIndex: clientIndex + 1,
-            modelName,
-            stage: "plain_text_returned",
-            durationMs: Date.now() - startedAt,
-          });
-          return {
-            message: String(text).trim(),
-            actions: [],
-            suggestions: [],
-          };
-        }
       } catch (error) {
         const retryable = isRetryableGeminiError(error);
         const summary = summarizeError(error);
@@ -299,7 +431,7 @@ async function generateRecommendationJson(prompt) {
         const model = client.getGenerativeModel({
           model: modelName,
           generationConfig: {
-            temperature: 0.85,
+            temperature: 0.4,
             maxOutputTokens: 600,
             responseMimeType: "application/json",
           },
@@ -392,16 +524,24 @@ Each item must be: {"id":"menu id","name":"item name","price":123,"reason":"shor
 router.post("/assistant", auth, async (req, res) => {
   try {
     const message = String(req.body?.message || "").trim();
-    const prompt = String(req.body?.prompt || "").trim();
+    const guestName = String(req.body?.guestName || req.user?.name || "").trim();
+    const tableId = String(req.body?.tableId || "").trim();
+    const cartItems = normalizeCartItems(req.body?.cart || []);
 
-    if (!message || !prompt) {
-      return res.status(400).json({ message: "message and prompt are required" });
+    if (!message) {
+      return res.status(400).json({ message: "message is required" });
     }
 
     const menu = await MenuItem.find({}).sort({ category: 1, name: 1 }).lean();
     const normalizedMenu = normalizeMenuItems(menu);
 
-    const response = await generateAssistantJson(`${prompt}\n\nUser: "${message}"`);
+    const response = await generateAssistantJson({
+      message,
+      guestName,
+      tableId,
+      cartItems,
+      menuItems: normalizedMenu,
+    });
     if (response) {
       console.log("[AI:assistant] final=ai_response");
       return res.json(response);
