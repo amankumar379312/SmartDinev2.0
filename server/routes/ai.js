@@ -172,6 +172,18 @@ function normalizeCartItems(cartItems = []) {
     .filter((item) => item.name);
 }
 
+function buildCartSummary(cartItems) {
+  const totalQty = cartItems.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+  return {
+    itemCount: cartItems.length,
+    totalQty,
+    items: cartItems.slice(0, 8).map((item) => ({
+      name: item.name,
+      qty: item.qty,
+    })),
+  };
+}
+
 function buildMenuLookup(menuItems) {
   return new Map(menuItems.map((item) => [item.name.toLowerCase(), item]));
 }
@@ -209,6 +221,95 @@ function inferMenuMentions(text, menuItems) {
     .map((item) => ({ ...item, normalized: normalizePlainText(item.name) }))
     .filter((item) => item.normalized && normalizedText.includes(item.normalized))
     .sort((a, b) => b.normalized.length - a.normalized.length);
+}
+
+function buildMenuCategorySummary(menuItems) {
+  const buckets = new Map();
+  for (const item of menuItems) {
+    const key = item.category || "other";
+    const bucket = buckets.get(key) || {
+      category: key,
+      count: 0,
+      minPrice: Number.POSITIVE_INFINITY,
+      maxPrice: 0,
+      samples: [],
+    };
+    bucket.count += 1;
+    if (item.price > 0) {
+      bucket.minPrice = Math.min(bucket.minPrice, item.price);
+      bucket.maxPrice = Math.max(bucket.maxPrice, item.price);
+    }
+    if (bucket.samples.length < 3) bucket.samples.push(item.name);
+    buckets.set(key, bucket);
+  }
+
+  return [...buckets.values()]
+    .sort((a, b) => a.category.localeCompare(b.category))
+    .map((bucket) => ({
+      category: bucket.category,
+      count: bucket.count,
+      priceRange: bucket.minPrice === Number.POSITIVE_INFINITY
+        ? "NA"
+        : `Rs ${bucket.minPrice}-${bucket.maxPrice}`,
+      samples: bucket.samples,
+    }));
+}
+
+function dedupeMenuItems(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = String(item?.name || "").toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildRelevantMenuItems(userMessage, menuItems, cartItems) {
+  const directMentions = inferMenuMentions(userMessage, menuItems);
+  const budget = extractBudget(userMessage);
+  const affordable = budget
+    ? menuItems.filter((item) => item.price > 0 && item.price <= budget).sort((a, b) => b.price - a.price)
+    : [];
+  const cartRelated = cartItems
+    .map((cartItem) => menuItems.find((menuItem) => menuItem.name.toLowerCase() === cartItem.name.toLowerCase()))
+    .filter(Boolean);
+  const featured = [...menuItems]
+    .sort((a, b) => a.category.localeCompare(b.category) || a.price - b.price)
+    .slice(0, 8);
+
+  return dedupeMenuItems([
+    ...directMentions,
+    ...cartRelated,
+    ...affordable.slice(0, 6),
+    ...featured,
+  ]).slice(0, 12);
+}
+
+function buildAssistantContext({ message, guestName, tableId, cartItems, menuItems }) {
+  const relevantMenuItems = buildRelevantMenuItems(message, menuItems, cartItems);
+  return {
+    guestName: guestName || "Guest",
+    tableId: tableId || "walkin",
+    message: String(message || "").trim(),
+    normalizedMessage: normalizePlainText(message),
+    cart: buildCartSummary(cartItems),
+    menuOverview: {
+      totalItems: menuItems.length,
+      categories: buildMenuCategorySummary(menuItems).slice(0, 10),
+    },
+    relevantMenuItems: relevantMenuItems.map((item) => ({
+      name: item.name,
+      category: item.category,
+      price: item.price,
+      description: item.description || "",
+    })),
+    mentionedItems: inferMenuMentions(message, menuItems).slice(0, 6).map((item) => item.name),
+    budgets: {
+      requestedBudget: extractBudget(message),
+    },
+    allowedActions: ["add_to_cart", "remove_from_cart", "show_menu", "open_cart", "place_order", "ask_choice"],
+  };
 }
 
 function detectDietaryProfile(text) {
@@ -319,21 +420,31 @@ function buildBudgetResponse(userMessage, menuItems) {
   };
 }
 
-function buildResponseFromPlainText(rawText, userMessage, menuItems) {
-  const text = String(rawText || "").trim();
-  if (!text) return null;
-  const normalizedUserMessage = normalizePlainText(userMessage);
+function buildDirectItemIntent(context, menuItems) {
+  const mentions = inferMenuMentions(context.message, menuItems);
+  if (!mentions.length) return null;
 
-  const dietaryResponse = buildDietaryResponse(`${userMessage} ${text}`, menuItems);
+  const normalized = context.normalizedMessage;
+  if (!/\b(add|order|want|have|get|bring|give|take)\b/.test(normalized)) return null;
+
+  return {
+    message: `Certainly. I can help with ${mentions.slice(0, 2).map((item) => item.name).join(" and ")}.`,
+    actions: mentions.slice(0, 2).map((item) => ({ type: "add_to_cart", item: item.name, qty: 1 })),
+    suggestions: ["My cart", "Add another item", "Place order"],
+  };
+}
+
+function resolveDeterministicIntent(context, menuItems) {
+  const directItemIntent = buildDirectItemIntent(context, menuItems);
+  if (directItemIntent) return directItemIntent;
+
+  const dietaryResponse = buildDietaryResponse(context.message, menuItems);
   if (dietaryResponse) return dietaryResponse;
 
-  const budgetResponse = buildBudgetResponse(`${userMessage} ${text}`, menuItems);
+  const budgetResponse = buildBudgetResponse(context.message, menuItems);
   if (budgetResponse) return budgetResponse;
 
-  const normalizedRaw = normalizePlainText(text);
-  if (!normalizedRaw) return null;
-
-  if (/\b(show|open|see|browse)\b.*\bmenu\b|\bfull menu\b/i.test(normalizedUserMessage)) {
+  if (/\b(show|open|see|browse)\b.*\bmenu\b|\bfull menu\b/i.test(context.normalizedMessage)) {
     return {
       message: "Certainly. I can open the menu so you can browse everything available right now.",
       actions: [{ type: "show_menu" }],
@@ -341,7 +452,7 @@ function buildResponseFromPlainText(rawText, userMessage, menuItems) {
     };
   }
 
-  if (/\b(cart|basket|checkout|bill)\b/i.test(normalizedUserMessage)) {
+  if (/\b(cart|basket|checkout|bill)\b/i.test(context.normalizedMessage)) {
     return {
       message: "I can open your cart so you can review the order and total.",
       actions: [{ type: "open_cart" }],
@@ -349,7 +460,23 @@ function buildResponseFromPlainText(rawText, userMessage, menuItems) {
     };
   }
 
-  const mentions = inferMenuMentions(`${text} ${userMessage}`, menuItems);
+  return null;
+}
+
+function buildResponseFromPlainText(rawText, context, menuItems) {
+  const text = String(rawText || "").trim();
+  if (!text) return null;
+  const deterministic = resolveDeterministicIntent({
+    ...context,
+    message: `${context.message} ${text}`.trim(),
+    normalizedMessage: normalizePlainText(`${context.message} ${text}`),
+  }, menuItems);
+  if (deterministic) return deterministic;
+
+  const normalizedRaw = normalizePlainText(text);
+  if (!normalizedRaw) return null;
+
+  const mentions = inferMenuMentions(`${text} ${context.message}`, menuItems);
   if (mentions.length) {
     return {
       message: looksLikeBrokenStructuredText(text)
@@ -440,24 +567,28 @@ function sanitizeAssistantResponse(parsed, menuItems) {
   };
 }
 
-function tryParseAssistantResponse(rawText, menuItems, userMessage) {
+function tryParseAssistantResponse(rawText, menuItems, context) {
   const strictParsed = sanitizeAssistantResponse(safeJsonParse(rawText, "object"), menuItems);
   if (strictParsed) return strictParsed;
 
   const repairedParsed = sanitizeAssistantResponse(safeJsonParseLenient(rawText, "object"), menuItems);
   if (repairedParsed) return repairedParsed;
 
-  return buildResponseFromPlainText(rawText, userMessage, menuItems);
+  return buildResponseFromPlainText(rawText, context, menuItems);
 }
 
-function buildAssistantPrompt({ message, guestName, tableId, cartItems, menuItems }) {
-  const menuBlock = menuItems
-    .map((item) => `- ${item.name} | category=${item.category} | price=Rs ${item.price} | desc=${item.description || "NA"}`)
-    .join("\n");
-  const cartBlock = cartItems.length
-    ? cartItems.map((item) => `${item.name} x${item.qty}`).join(", ")
-    : "empty";
-
+function buildAssistantPrompt(context) {
+  const compactContext = JSON.stringify({
+    guest: context.guestName,
+    table: context.tableId,
+    userMessage: context.message,
+    cart: context.cart,
+    menuOverview: context.menuOverview,
+    relevantMenuItems: context.relevantMenuItems,
+    mentionedItems: context.mentionedItems,
+    requestedBudget: context.budgets.requestedBudget,
+    allowedActions: context.allowedActions,
+  }, null, 2);
   return `
 ${RESTAURANT_CONTEXT}
 
@@ -501,22 +632,16 @@ STRICT RULES:
 - If uncertain, ask a clarifying question using message and ask_choice.
 - If the guest says something casual or random, respond in a friendly human way and gently steer the conversation back toward menu help or ordering.
 - Do not return show_menu or open_cart unless the guest explicitly asked to open/show the menu/cart/bill.
+- Use RELEVANT_MENU_ITEMS and MENU_OVERVIEW as the source of truth for recommendations. If something is not in context, do not invent it.
+- Prefer concise waiter replies with one clear next step.
 
 CONTEXT:
-Guest=${guestName || "Guest"}
-Table=${tableId || "walkin"}
-Cart=${cartBlock}
-
-MENU:
-${menuBlock}
-
-USER MESSAGE:
-${message}
+${compactContext}
 `.trim();
 }
 
-function buildAssistantFallback(message, menuItems) {
-  const text = String(message || "").toLowerCase();
+function buildAssistantFallback(context, menuItems) {
+  const text = String(context?.message || "").toLowerCase();
   const actions = [];
   const suggestions = ["Full menu", "My cart", "Chef's pick"];
   const matchedItem = menuItems.find((item) => text.includes(item.name.toLowerCase()));
@@ -585,16 +710,10 @@ function buildAssistantFallback(message, menuItems) {
   };
 }
 
-async function generateAssistantJson({ message, guestName, tableId, cartItems, menuItems }) {
+async function generateAssistantJson(context, menuItems) {
   if (!geminiClients.length) return null;
 
-  const prompt = buildAssistantPrompt({
-    message,
-    guestName,
-    tableId,
-    cartItems,
-    menuItems,
-  });
+  const prompt = buildAssistantPrompt(context);
 
   let attempts = 0;
   for (const modelName of GEMINI_MODEL_CHAIN) {
@@ -636,7 +755,7 @@ async function generateAssistantJson({ message, guestName, tableId, cartItems, m
           rawLength: text.length,
         });
 
-        const parsed = tryParseAssistantResponse(text, menuItems, message);
+        const parsed = tryParseAssistantResponse(text, menuItems, context);
         if (parsed) {
           logAiAttempt("assistant", {
             keyIndex: clientIndex + 1,
@@ -808,21 +927,28 @@ router.post("/assistant", auth, async (req, res) => {
 
     const menu = await MenuItem.find({}).sort({ category: 1, name: 1 }).lean();
     const normalizedMenu = normalizeMenuItems(menu);
-
-    const response = await generateAssistantJson({
+    const context = buildAssistantContext({
       message,
       guestName,
       tableId,
       cartItems,
       menuItems: normalizedMenu,
     });
+
+    const deterministicResponse = resolveDeterministicIntent(context, normalizedMenu);
+    if (deterministicResponse) {
+      console.log("[AI:assistant] final=deterministic_response");
+      return res.json(deterministicResponse);
+    }
+
+    const response = await generateAssistantJson(context, normalizedMenu);
     if (response) {
       console.log("[AI:assistant] final=ai_response");
       return res.json(response);
     }
 
     console.log("[AI:assistant] final=fallback_response");
-    return res.json(buildAssistantFallback(message, normalizedMenu));
+    return res.json(buildAssistantFallback(context, normalizedMenu));
   } catch (err) {
     console.error("Assistant route failed:", err);
     return res.json({
