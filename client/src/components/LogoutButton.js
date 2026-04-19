@@ -9,8 +9,10 @@ export default function LogoutButton({ className = "", label = "Logout" }) {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
+    const loginPath = getLoginPathForRoleScope(roleScope);
     await logout();
-    navigate(getLoginPathForRoleScope(roleScope), { replace: true });
+    navigate(loginPath, { replace: true });
+    window.location.replace(loginPath);
   };
 
   return (

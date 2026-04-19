@@ -348,6 +348,11 @@ export default function AfterOrder() {
       });
     };
 
+    const onTableOrderCreated = ({ tableId: eventTableId, orderId }) => {
+      if (!orderId || eventTableId !== tableId) return;
+      setOrderIds((prev) => (prev.includes(orderId) ? prev : [...prev, orderId]));
+    };
+
     const onWaiterAccepted = ({ tableId: respondedTable }) => {
       if (respondedTable !== tableId) return;
 
@@ -368,12 +373,14 @@ export default function AfterOrder() {
 
     socket.on("order:update", onOrderUpdate);
     socket.on("orderServed", onServed);
+    socket.on("table:order-created", onTableOrderCreated);
     socket.on("waiter:accepted", onWaiterAccepted);
 
     return () => {
       orderIds.forEach((orderId) => socket.emit("order:unsubscribe", { orderId }));
       socket.off("order:update", onOrderUpdate);
       socket.off("orderServed", onServed);
+      socket.off("table:order-created", onTableOrderCreated);
       socket.off("waiter:accepted", onWaiterAccepted);
     };
   }, [orderIds, tableId]);

@@ -23,8 +23,10 @@ export default function GlobalSessionActions() {
   }
 
   const handleLogout = async () => {
+    const loginPath = getLoginPathForRoleScope(roleScope);
     await logout();
-    navigate(getLoginPathForRoleScope(roleScope), { replace: true });
+    navigate(loginPath, { replace: true });
+    window.location.replace(loginPath);
   };
 
   return (

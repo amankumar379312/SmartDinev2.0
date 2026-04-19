@@ -1,110 +1,338 @@
-/* Center and match SmartDine theme */
-body {
-  font-family: "Poppins", sans-serif;
- 
-  margin: 0;
-  color: #1f2937;
-}
+/* ============================================================
+   Bill.css  —  SmartDine Bill Page (Premium Dark Theme)
+   ============================================================ */
 
-.bill-container {
+/* ── Page shell ── */
+.bill-page-shell {
+  position: relative;
   min-height: 100vh;
   display: flex;
-  justify-content: center;
   align-items: center;
-  padding: 20px;
+  justify-content: center;
+  padding: 32px 16px;
+  background: linear-gradient(135deg, #0b0f1a 0%, #0f172a 50%, #1a0a00 100%);
+  overflow: hidden;
+  font-family: "Inter", "Poppins", sans-serif;
 }
 
-.bill-card {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  border-radius: 25px;
-  box-shadow: 0 8px 35px rgba(0, 0, 0, 0.12);
-  padding: 40px 50px;
-  max-width: 500px;
+/* ── Ambient colour blobs ── */
+.bill-ambient-blob {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(80px);
+}
+.bill-blob-1 {
+  top: -8%;
+  left: -5%;
+  width: 520px;
+  height: 520px;
+  background: radial-gradient(circle, rgba(234, 88, 12, 0.2) 0%, transparent 70%);
+}
+.bill-blob-2 {
+  bottom: -10%;
+  right: -5%;
+  width: 440px;
+  height: 440px;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.12) 0%, transparent 70%);
+}
+
+/* ── Loading / state UI ── */
+.bill-loading-ring {
+  width: 52px;
+  height: 52px;
+  border: 4px solid rgba(249, 115, 22, 0.2);
+  border-top-color: #f97316;
+  border-radius: 50%;
+  animation: bill-spin 0.8s linear infinite;
+  box-shadow: 0 0 20px rgba(249, 115, 22, 0.3);
+}
+@keyframes bill-spin {
+  to { transform: rotate(360deg); }
+}
+.bill-state-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  backdrop-filter: blur(20px);
+}
+.bill-state-icon { color: rgba(100, 116, 139, 0.7); }
+.bill-state-text {
+  color: #94a3b8;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+/* ── Card outer wrapper (max-width + entrance animation) ── */
+.bill-card-outer {
+  position: relative;
+  z-index: 10;
   width: 100%;
-  text-align: center;
+  max-width: 520px;
+  animation: bill-fade-up 0.5s ease both;
+}
+@keyframes bill-fade-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Brand Header ── */
+.bill-brand-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding: 0 4px;
+}
+.bill-brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bill-logo-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #f97316;
+  box-shadow: 0 0 20px rgba(249, 115, 22, 0.5);
+}
+.bill-logo-icon { color: #fff; }
+.bill-logo-text {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+.bill-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  background: rgba(249, 115, 22, 0.15);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  border-radius: 999px;
+  color: #fb923c;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ── Main card ── */
+.bill-main-card {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 28px;
+  padding: 36px 32px;
+  backdrop-filter: blur(24px);
+  box-shadow:
+    0 25px 60px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+@media (max-width: 480px) {
+  .bill-main-card { padding: 28px 20px; }
+}
+
+/* ── Title block ── */
+.bill-title-block {
+  text-align: center;
+  margin-bottom: 28px;
+}
+.bill-receipt-icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  background: rgba(249, 115, 22, 0.12);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  margin-bottom: 16px;
+  box-shadow: 0 0 30px rgba(249, 115, 22, 0.15);
+}
+.bill-receipt-icon { color: #fb923c; }
 .bill-title {
   font-size: 2rem;
-  font-weight: 600;
-  color: #1e293b;
-  margin-bottom: 15px;
+  font-weight: 900;
+  color: #f8fafc;
+  letter-spacing: -0.03em;
+  margin: 0 0 6px;
 }
-
-.bill-info {
-  text-align: left;
-  background: #f8fafc;
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 25px;
-  line-height: 1.7;
-  color: #334155;
-}
-
-.bill-items {
-  text-align: left;
-  margin-bottom: 20px;
-}
-
-.bill-items h2 {
-  font-size: 1.2rem;
-  color: #2563eb;
-  margin-bottom: 8px;
-}
-
-.bill-items ul {
-  list-style-type: "🍴 ";
-  padding-left: 1.5rem;
-}
-
-.bill-items li {
-  margin: 6px 0;
-  color: #475569;
-}
-
-.bill-total {
-  margin-top: 20px;
-  background: #eff6ff;
-  border-radius: 12px;
-  padding: 16px;
-}
-
-.bill-total h2 {
-  font-size: 1.1rem;
-  color: #1d4ed8;
+.bill-subtitle {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #64748b;
   margin: 0;
 }
 
-.bill-total p {
-  font-size: 1.8rem;
+/* ── Meta grid ── */
+.bill-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 24px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 18px;
+  padding: 20px;
+}
+.bill-meta-item { display: flex; flex-direction: column; gap: 5px; }
+.bill-meta-label-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.bill-meta-label-icon { color: #475569; }
+.bill-meta-label {
+  font-size: 0.65rem;
   font-weight: 700;
-  margin: 5px 0 0;
-  color: #0f172a;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #475569;
+}
+.bill-meta-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  line-height: 1.3;
+}
+.bill-meta-value--sm { font-size: 0.78rem; font-weight: 500; color: #94a3b8; }
+.bill-meta-value--accent { color: #fb923c; }
+
+/* ── Divider ── */
+.bill-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 24px 0;
 }
 
-.bill-btn {
-  margin-top: 28px;
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+/* ── Order section ── */
+.bill-order-section { margin-bottom: 24px; }
+.bill-section-title {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #64748b;
+  margin: 0 0 16px;
+  padding: 0 4px;
+}
+.bill-item-list { display: flex; flex-direction: column; gap: 0; }
+.bill-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.2s;
+}
+.bill-item-row:last-child { border-bottom: none; }
+.bill-item-row:hover { background: rgba(255, 255, 255, 0.02); border-radius: 10px; }
+.bill-item-left { display: flex; align-items: center; gap: 12px; }
+.bill-item-qty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #94a3b8;
+}
+.bill-item-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #e2e8f0;
+}
+.bill-item-price {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+/* ── Total banner ── */
+.bill-total-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 22px;
+  background: linear-gradient(135deg, rgba(249,115,22,0.15) 0%, rgba(249,115,22,0.05) 100%);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  border-radius: 18px;
+  margin-bottom: 24px;
+  box-shadow: 0 0 30px rgba(249, 115, 22, 0.08);
+}
+.bill-total-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #fb923c;
+  margin: 0 0 4px;
+}
+.bill-total-amount {
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: #f8fafc;
+  letter-spacing: -0.03em;
+  margin: 0;
+  line-height: 1;
+}
+.bill-total-badge {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: rgba(249, 115, 22, 0.2);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fb923c;
+}
+
+/* ── Pay button ── */
+.bill-pay-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
   color: #fff;
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 700;
   border: none;
-  border-radius: 10px;
-  padding: 14px 24px;
+  border-radius: 16px;
   cursor: pointer;
-  transition: all 0.3s ease;
-  width: 100%;
+  transition: all 0.25s ease;
+  box-shadow: 0 8px 24px rgba(249, 115, 22, 0.35);
+  letter-spacing: 0.01em;
 }
-
-.bill-btn:hover {
+.bill-pay-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 5px 18px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 12px 32px rgba(249, 115, 22, 0.5);
+  background: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
 }
+.bill-pay-btn:active { transform: translateY(0); }
+.bill-btn-arrow { margin-left: auto; }
 
-.bill-msg {
+/* ── Footer note ── */
+.bill-footer-note {
   text-align: center;
-  padding: 50px;
-  font-size: 1.1rem;
-  color: #475569;
+  font-size: 0.72rem;
+  color: #334155;
+  font-weight: 500;
+  margin: 16px 0 0;
 }

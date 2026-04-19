@@ -6,6 +6,17 @@ import {
   buildWorkflowPayload,
   readStoredOrderIds,
 } from "../utils/workflowSession";
+import {
+  UtensilsCrossed,
+  Receipt,
+  CreditCard,
+  User,
+  Hash,
+  ShoppingBag,
+  Calendar,
+  ChevronRight,
+  Sparkles,
+} from "lucide-react";
 
 export default function Bill() {
   const location = useLocation();
@@ -80,18 +91,32 @@ export default function Bill() {
   );
 
   if (requestedOrderIds.length === 0) return (
-    <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4">
-      <div className="text-center text-slate-400 font-medium">No order selected.</div>
+    <div className="bill-page-shell">
+      <div className="bill-ambient-blob bill-blob-1" />
+      <div className="bill-ambient-blob bill-blob-2" />
+      <div className="bill-state-card">
+        <Receipt className="bill-state-icon" size={40} />
+        <p className="bill-state-text">No order selected.</p>
+      </div>
     </div>
   );
+
   if (loading) return (
-    <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4">
-      <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+    <div className="bill-page-shell">
+      <div className="bill-ambient-blob bill-blob-1" />
+      <div className="bill-ambient-blob bill-blob-2" />
+      <div className="bill-loading-ring" />
     </div>
   );
+
   if (!summary) return (
-    <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4">
-      <div className="text-center text-slate-400 font-medium">Bill not found.</div>
+    <div className="bill-page-shell">
+      <div className="bill-ambient-blob bill-blob-1" />
+      <div className="bill-ambient-blob bill-blob-2" />
+      <div className="bill-state-card">
+        <Receipt className="bill-state-icon" size={40} />
+        <p className="bill-state-text">Bill not found.</p>
+      </div>
     </div>
   );
 
@@ -118,71 +143,119 @@ export default function Bill() {
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4 sm:p-8 font-sans selection:bg-orange-500 selection:text-white relative">
-      <div className="fixed inset-0 z-0">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#020617] via-[#020617] to-[#020617]" />
-      </div>
+    <div className="bill-page-shell">
+      {/* Ambient blobs */}
+      <div className="bill-ambient-blob bill-blob-1" />
+      <div className="bill-ambient-blob bill-blob-2" />
 
-      <div className="relative z-10 w-full max-w-xl bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden p-6 sm:p-10">
-        <div className="text-center mb-8">
-          <div className="mx-auto w-16 h-16 bg-orange-500/10 rounded-full flex items-center justify-center mb-4 border border-orange-500/20 shadow-[0_0_30px_rgba(249,115,22,0.15)]">
-            <span className="text-3xl">Bill</span>
-          </div>
-          <h1 className="text-3xl font-black text-white tracking-tight">Your Bill</h1>
-          <p className="text-sm font-medium text-slate-400 mt-2">Please review your order details</p>
-        </div>
+      <div className="bill-card-outer">
 
-        <div className="grid grid-cols-2 gap-4 mb-8 bg-black/30 p-5 rounded-2xl border border-white/5">
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-1 font-bold">Email</p>
-            <p className="text-sm text-slate-300 font-medium truncate">{summary.userEmail || "-"}</p>
+        {/* ── Brand Header ── */}
+        <header className="bill-brand-header">
+          <div className="bill-brand-logo">
+            <div className="bill-logo-icon-wrap">
+              <UtensilsCrossed size={22} className="bill-logo-icon" />
+            </div>
+            <span className="bill-logo-text">SmartDine</span>
           </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-1 font-bold">Table No</p>
-            <p className="text-sm text-white font-bold">{summary.tableNo || tableId || "-"}</p>
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-1 font-bold">Total Items</p>
-            <p className="text-sm text-white font-bold">{totalItems}</p>
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-1 font-bold">Date & Time</p>
-            <p className="text-sm text-slate-300 font-medium">{summary.placedAt ? new Date(summary.placedAt).toLocaleString() : "-"}</p>
-          </div>
-        </div>
+          <span className="bill-badge-pill">
+            <Sparkles size={12} />
+            Invoice
+          </span>
+        </header>
 
-        <div className="mb-8">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4 px-1">Order Summary</h2>
-          <div className="space-y-3 font-medium">
-            {(summary.items || []).map((item, idx) => (
-              <div key={idx} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-xs font-bold text-slate-300">
-                    {item.qty}x
-                  </div>
-                  <span className="text-sm text-slate-200">{item.name}</span>
-                </div>
-                <div className="text-sm font-bold text-white">
-                  Rs {item.lineTotal}
-                </div>
+        {/* ── Main Card ── */}
+        <div className="bill-main-card">
+
+          {/* Title block */}
+          <div className="bill-title-block">
+            <div className="bill-receipt-icon-wrap">
+              <Receipt size={28} className="bill-receipt-icon" />
+            </div>
+            <h1 className="bill-title">Your Bill</h1>
+            <p className="bill-subtitle">Please review your order details below</p>
+          </div>
+
+          {/* Meta grid */}
+          <div className="bill-meta-grid">
+            <div className="bill-meta-item">
+              <div className="bill-meta-label-row">
+                <User size={12} className="bill-meta-label-icon" />
+                <span className="bill-meta-label">Email</span>
               </div>
-            ))}
+              <p className="bill-meta-value bill-meta-value--sm">{summary.userEmail || "—"}</p>
+            </div>
+            <div className="bill-meta-item">
+              <div className="bill-meta-label-row">
+                <Hash size={12} className="bill-meta-label-icon" />
+                <span className="bill-meta-label">Table</span>
+              </div>
+              <p className="bill-meta-value bill-meta-value--accent">{summary.tableNo || tableId || "—"}</p>
+            </div>
+            <div className="bill-meta-item">
+              <div className="bill-meta-label-row">
+                <ShoppingBag size={12} className="bill-meta-label-icon" />
+                <span className="bill-meta-label">Total Items</span>
+              </div>
+              <p className="bill-meta-value">{totalItems}</p>
+            </div>
+            <div className="bill-meta-item">
+              <div className="bill-meta-label-row">
+                <Calendar size={12} className="bill-meta-label-icon" />
+                <span className="bill-meta-label">Date &amp; Time</span>
+              </div>
+              <p className="bill-meta-value bill-meta-value--sm">
+                {summary.placedAt ? new Date(summary.placedAt).toLocaleString() : "—"}
+              </p>
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-end justify-between p-5 bg-gradient-to-r from-orange-500/10 to-transparent border-l-4 border-orange-500 rounded-xl mb-8">
-          <div>
-             <p className="text-xs font-bold text-orange-400 uppercase tracking-widest mb-1">Total Amount</p>
-             <p className="text-3xl font-black text-white leading-none">Rs {summary.total}</p>
+          {/* Divider */}
+          <div className="bill-divider" />
+
+          {/* Order Summary */}
+          <div className="bill-order-section">
+            <h2 className="bill-section-title">Order Summary</h2>
+            <div className="bill-item-list">
+              {(summary.items || []).map((item, idx) => (
+                <div key={idx} className="bill-item-row">
+                  <div className="bill-item-left">
+                    <div className="bill-item-qty">{item.qty}×</div>
+                    <span className="bill-item-name">{item.name}</span>
+                  </div>
+                  <div className="bill-item-price">₹ {item.lineTotal}</div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
 
-        <button
-          onClick={handlePayment}
-          className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white font-bold text-lg shadow-lg shadow-orange-500/30 transition-all hover:-translate-y-1"
-        >
-          Proceed to Pay
-        </button>
+          {/* Total banner */}
+          <div className="bill-total-banner">
+            <div>
+              <p className="bill-total-label">Grand Total</p>
+              <p className="bill-total-amount">₹ {summary.total}</p>
+            </div>
+            <div className="bill-total-badge">
+              <Receipt size={18} />
+            </div>
+          </div>
+
+          {/* Pay button */}
+          <button
+            onClick={handlePayment}
+            className="bill-pay-btn"
+            id="bill-pay-btn"
+          >
+            <CreditCard size={20} />
+            Proceed to Pay
+            <ChevronRight size={20} className="bill-btn-arrow" />
+          </button>
+
+          {/* Footer */}
+          <p className="bill-footer-note">
+            Secured payment powered by SmartDine
+          </p>
+        </div>
       </div>
     </div>
   );

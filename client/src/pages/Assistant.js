@@ -1,7 +1,6 @@
 import React, {
   useState, useRef, useEffect, useMemo, useContext, useCallback,
 } from "react";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { useNavigate, useLocation } from "react-router-dom";
 import API from "../api";
 import { AuthContext } from "../context/AuthContext";
@@ -69,7 +68,7 @@ button:disabled{opacity:0.45;cursor:not-allowed;}
 `;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const MODEL_CHAIN = ["models/gemini-3.1-flash-lite-preview", "gemini-2.5-flash", "gemini-2.0-flash"];
+const MODEL_CHAIN = [];
 
 // ════════════════════════════════════════════════════════
 // MODE TOGGLE BUTTON
@@ -221,10 +220,6 @@ export default function Assistant() {
   }, [cart, menuItems, currentTableId, user, navigate]);
 
   // ── AI ─────────────────────────────────────────
-  const modelIdxRef = useRef(0);
-  const sessionRef = useRef(null);
-  const genAIRef = useRef(null);
-
   const buildPrompt = useCallback((cartSnap) => {
     const cs = cartSnap?.length > 0
       ? cartSnap.map((c) => `${c.name} ×${c.qty}`).join(", ") : "empty";
@@ -247,18 +242,9 @@ Action types:
 Rules: Only real menu items. On "add X" always add_to_cart. Suggest pairings. 2-3 chips.`;
   }, [menuCatalog, user, currentTableId]);
 
-  const initSession = useCallback((idx = 0) => {
-    try {
-      if (!genAIRef.current)
-        genAIRef.current = new GoogleGenerativeAI(process.env.REACT_APP_GEMINI_API_KEY);
-      modelIdxRef.current = idx;
-      const model = genAIRef.current.getGenerativeModel({ model: MODEL_CHAIN[idx] });
-      sessionRef.current = model.startChat({
-        history: [],
-        generationConfig: { temperature: 0.85, maxOutputTokens: 600 },
-      });
-    } catch (e) { console.error(e); }
-  }, []);
+  const modelIdxRef = useRef(0);
+  const sessionRef = useRef(null);
+  const initSession = useCallback(() => {}, []);
 
   const askAIWithRetry = useCallback(async (text, cartSnap) => {
     const prompt = buildPrompt(cartSnap);
@@ -292,6 +278,27 @@ Rules: Only real menu items. On "add X" always add_to_cart. Suggest pairings. 2-
     return { message: "I'm a bit busy right now! Browse the menu and add items manually.", actions: [], suggestions: ["📋 Full menu", "🛒 My cart"] };
   }, [buildPrompt, initSession]);
 
+  const askAIServer = useCallback(async (text, cartSnap) => {
+    try {
+      const { data } = await API.post("/ai/assistant", {
+        message: text,
+        prompt: buildPrompt(cartSnap),
+      });
+      return {
+        message: data?.message || "I'm a bit busy right now! Browse the menu and add items manually.",
+        actions: Array.isArray(data?.actions) ? data.actions : [],
+        suggestions: Array.isArray(data?.suggestions) ? data.suggestions : ["Full menu", "My cart"],
+      };
+    } catch (error) {
+      console.error("AI server error:", error);
+      return {
+        message: "I'm a bit busy right now! Browse the menu and add items manually.",
+        actions: [],
+        suggestions: ["Full menu", "My cart"],
+      };
+    }
+  }, [buildPrompt]);
+
   // ── SHARED ─────────────────────────────────────
   const shared = {
     user, menuItems, menuNames, menuGrouped, menuLoading,
@@ -299,7 +306,7 @@ Rules: Only real menu items. On "add X" always add_to_cart. Suggest pairings. 2-
     isCartOpen, setIsCartOpen,
     isMenuOpen, setIsMenuOpen,
     toastItem,
-    initSession, sessionRef, askAIWithRetry, buildPrompt,
+    initSession, askAIWithRetry: askAIServer, buildPrompt,
     onToggleMode: () => setMode((m) => m === "voice" ? "chat" : "voice"),
     currentTableId,
     mode,

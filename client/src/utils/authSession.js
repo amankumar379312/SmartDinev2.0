@@ -20,6 +20,28 @@ function decodeBase64Url(input) {
   return atob(padded);
 }
 
+function clearBrowserCookies() {
+  const cookies = String(document.cookie || "")
+    .split(";")
+    .map((cookie) => cookie.trim())
+    .filter(Boolean);
+
+  const hostnameParts = window.location.hostname.split(".").filter(Boolean);
+  const domains = [window.location.hostname];
+  for (let index = 1; index < hostnameParts.length - 1; index += 1) {
+    domains.push(`.${hostnameParts.slice(index).join(".")}`);
+  }
+
+  cookies.forEach((cookie) => {
+    const [name] = cookie.split("=");
+    if (!name) return;
+    document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+    domains.forEach((domain) => {
+      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=${domain}`;
+    });
+  });
+}
+
 export function parseJwt(token) {
   try {
     const [, payload] = String(token || "").split(".");
@@ -90,6 +112,8 @@ export function clearSession(options = {}) {
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(ROLE_KEY);
   localStorage.removeItem("authToken");
+  sessionStorage.clear();
+  clearBrowserCookies();
   if (clearResumeRoute) {
     localStorage.removeItem(RESUME_ROUTE_KEY);
   }

@@ -234,11 +234,11 @@ export default function WaiterDashboard() {
 
   const placeManualOrder = async (e) => {
     e.preventDefault();
-    if (!email || !tableNo || cart.length === 0) { alert("Please fill in Email, Table No, and add items."); return; }
+    if (!tableNo || cart.length === 0) { alert("Please select a table and add items."); return; }
     try {
       setSubmitting(true);
       const items = cart.flatMap(it => Array.from({ length: it.qty }).map(() => it.name));
-      await API.post("/orders/create", { email, tableNo, items, totalCost });
+      await API.post("/orders/create", { email: email.trim() || undefined, tableNo, items, totalCost });
       alert("✅ Order placed successfully!");
       setCart([]); setEmail(""); setTableNo(""); setIsPosOpen(false);
       fetchOrders();
@@ -859,7 +859,7 @@ export default function WaiterDashboard() {
 
                   <form onSubmit={placeManualOrder} className="space-y-3">
                     <input
-                      type="email" required placeholder="Customer Email" value={email}
+                      type="email" placeholder="Customer Email (optional for occupied table)" value={email}
                       onChange={e => setEmail(e.target.value)}
                       className="w-full p-3.5 bg-slate-900/60 border border-slate-700 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 transition-all"
                     />

@@ -2,31 +2,48 @@ import React, { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import API from "../api";
-import { clearSession } from "../utils/authSession";
+import { clearSession, getLoginPathForRoleScope } from "../utils/authSession";
 import { getAfterOrderStorageKey } from "../utils/workflowSession";
 import { resolveSocketBaseUrl } from "../utils/runtimeConfig";
+import "../styles/thankyou.css";
+import {
+  UtensilsCrossed,
+  Star,
+  CheckCircle2,
+  Loader2,
+  Heart,
+  MessageSquare,
+  LogOut,
+} from "lucide-react";
 
 const socket = io(resolveSocketBaseUrl(), { transports: ["websocket"] });
 
 function Stars({ value, onChange }) {
+  const [hovered, setHovered] = useState(0);
   return (
-    <div className="flex items-center gap-2" role="radiogroup" aria-label="rating">
+    <div className="ty-stars-row" role="radiogroup" aria-label="rating">
       {[1, 2, 3, 4, 5].map((n) => (
         <button
           key={n}
           type="button"
           aria-label={`${n} star${n > 1 ? "s" : ""}`}
-          className={`text-3xl sm:text-4xl transition-all duration-300 hover:scale-110 focus:outline-none ${
-            value >= n ? "text-orange-500 drop-shadow-[0_0_10px_rgba(249,115,22,0.6)]" : "text-slate-600 hover:text-slate-500"
-          }`}
+          className={`ty-star-btn ${(hovered || value) >= n ? "ty-star-btn--active" : ""}`}
           onClick={() => onChange(n)}
+          onMouseEnter={() => setHovered(n)}
+          onMouseLeave={() => setHovered(0)}
         >
-          *
+          <Star
+            size={32}
+            fill={(hovered || value) >= n ? "currentColor" : "none"}
+            strokeWidth={1.5}
+          />
         </button>
       ))}
     </div>
   );
 }
+
+const RATING_LABELS = ["", "Poor", "Fair", "Good", "Great", "Excellent"];
 
 export default function ThankYou() {
   const navigate = useNavigate();
@@ -94,8 +111,10 @@ export default function ThankYou() {
   const setRating = (key, val) => setRatings((r) => ({ ...r, [key]: val }));
 
   const logoutAndGoLogin = () => {
+    const loginPath = getLoginPathForRoleScope("user");
     clearSession();
-    navigate("/login", { replace: true });
+    navigate(loginPath, { replace: true });
+    window.location.replace(loginPath);
   };
 
   const onSkip = () => logoutAndGoLogin();
@@ -120,80 +139,140 @@ export default function ThankYou() {
     }
   };
 
-  return (
-    <main className="min-h-screen bg-[#020617] flex items-center justify-center p-4 sm:p-8 font-sans selection:bg-orange-500 selection:text-white relative">
-      <div className="fixed inset-0 z-0">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#020617] via-[#020617] to-[#020617]" />
-      </div>
+  const ratingQuestions = [
+    { key: "foodQuality", label: "Food Quality", icon: "🍽️" },
+    { key: "ambience", label: "Ambience", icon: "✨" },
+    { key: "overall", label: "Overall Experience", icon: "🌟" },
+  ];
 
-      <div className="relative z-10 w-full max-w-xl bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden p-6 sm:p-10">
-        <header className="text-center mb-10">
-          <div className="mx-auto w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mb-6 border border-green-500/20 shadow-[0_0_30px_rgba(34,197,94,0.15)]">
-            <span className="text-3xl">TY</span>
+  return (
+    <main className="ty-page-shell">
+      {/* Ambient blobs */}
+      <div className="ty-blob ty-blob-1" />
+      <div className="ty-blob ty-blob-2" />
+      <div className="ty-blob ty-blob-3" />
+
+      <div className="ty-card-outer">
+
+        {/* ── Brand Header ── */}
+        <header className="ty-brand-header">
+          <div className="ty-brand-logo">
+            <div className="ty-logo-icon-wrap">
+              <UtensilsCrossed size={22} className="ty-logo-icon" />
+            </div>
+            <span className="ty-logo-text">SmartDine</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mb-2">Thank You!</h1>
-          <p className="text-sm font-medium text-slate-400">We value your feedback to improve our service.</p>
-          {paymentFinalizing && (
-            <p className="mt-4 text-sm font-semibold text-orange-400">Finalizing your payment and table status...</p>
-          )}
         </header>
 
-        <section className="space-y-8 mb-8">
-          <div className="flex flex-col items-center text-center">
-            <h2 className="text-sm font-bold uppercase tracking-widest text-slate-300 mb-3">Food Quality</h2>
-            <Stars value={ratings.foodQuality} onChange={(v) => setRating("foodQuality", v)} />
+        {/* ── Main Card ── */}
+        <div className="ty-main-card">
+
+          {/* Success indicator */}
+          <div className="ty-success-ring">
+            <div className="ty-success-ring-inner">
+              <CheckCircle2 size={36} className="ty-success-icon" />
+            </div>
+            <div className="ty-success-pulse" />
           </div>
 
-          <div className="flex flex-col items-center text-center">
-            <h2 className="text-sm font-bold uppercase tracking-widest text-slate-300 mb-3">Ambience</h2>
-            <Stars value={ratings.ambience} onChange={(v) => setRating("ambience", v)} />
+          <h1 className="ty-title">Thank You!</h1>
+          <p className="ty-subtitle">
+            Your payment was successful. We hope you enjoyed your meal!
+          </p>
+
+          {paymentFinalizing && (
+            <div className="ty-finalizing-bar">
+              <Loader2 size={14} className="ty-spin" />
+              <span>Finalizing payment &amp; updating table status…</span>
+            </div>
+          )}
+
+          {/* Divider */}
+          <div className="ty-divider-labeled">
+            <div className="ty-divider-line" />
+            <span className="ty-divider-label">
+              <Heart size={12} />
+              Share your experience
+            </span>
+            <div className="ty-divider-line" />
           </div>
 
-          <div className="flex flex-col items-center text-center">
-            <h2 className="text-sm font-bold uppercase tracking-widest text-slate-300 mb-3">Overall Experience</h2>
-            <Stars value={ratings.overall} onChange={(v) => setRating("overall", v)} />
+          {/* Rating questions */}
+          <div className="ty-ratings-grid">
+            {ratingQuestions.map(({ key, label, icon }) => (
+              <div key={key} className="ty-rating-card">
+                <div className="ty-rating-card-header">
+                  <span className="ty-rating-emoji">{icon}</span>
+                  <h2 className="ty-rating-label">{label}</h2>
+                  {ratings[key] > 0 && (
+                    <span className="ty-rating-text-badge">
+                      {RATING_LABELS[ratings[key]]}
+                    </span>
+                  )}
+                </div>
+                <Stars value={ratings[key]} onChange={(v) => setRating(key, v)} />
+              </div>
+            ))}
           </div>
-        </section>
 
-        <section className="mb-8">
-          <label htmlFor="ty-comment" className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-3 ml-1">
-            Any comments? (optional)
-          </label>
-          <textarea
-            id="ty-comment"
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="Share your thoughts..."
-            rows={3}
-            className="w-full bg-black/30 border border-white/10 rounded-xl p-4 text-white placeholder-slate-600 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 transition-all resize-none shadow-inner"
-          />
-        </section>
-
-        {msg && (
-          <div className="mb-6 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-semibold text-center">
-            {msg}
+          {/* Comment */}
+          <div className="ty-comment-section">
+            <label htmlFor="ty-comment" className="ty-comment-label">
+              <MessageSquare size={14} />
+              Any additional comments? <span className="ty-optional">(optional)</span>
+            </label>
+            <textarea
+              id="ty-comment"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Share your thoughts about your dining experience..."
+              rows={3}
+              className="ty-comment-textarea"
+            />
           </div>
-        )}
 
-        <div className="flex flex-col-reverse sm:flex-row items-center gap-3">
-          <button
-            className="w-full sm:w-1/3 py-3.5 rounded-xl text-slate-400 font-bold hover:text-white hover:bg-white/5 transition-all outline-none"
-            onClick={onSkip}
-            disabled={submitting || paymentFinalizing}
-          >
-            Skip
-          </button>
-          <button
-            className="w-full sm:w-2/3 py-3.5 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white font-bold shadow-lg shadow-orange-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 outline-none"
-            onClick={onSubmit}
-            disabled={submitting || paymentFinalizing}
-          >
-            {submitting ? "Submitting..." : "Submit Feedback"}
-          </button>
-        </div>
+          {/* Error message */}
+          {msg && (
+            <div className="ty-error-bar">
+              {msg}
+            </div>
+          )}
 
-        <div className="mt-8 pt-6 border-t border-white/5 text-center">
-          <p className="text-xs font-medium text-slate-500 tracking-wide">Your feedback helps us serve you better.</p>
+          {/* Actions */}
+          <div className="ty-actions-row">
+            <button
+              className="ty-skip-btn"
+              onClick={onSkip}
+              disabled={submitting || paymentFinalizing}
+              id="ty-skip-btn"
+            >
+              <LogOut size={16} />
+              Skip &amp; Exit
+            </button>
+            <button
+              className="ty-submit-btn"
+              onClick={onSubmit}
+              disabled={submitting || paymentFinalizing}
+              id="ty-submit-btn"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 size={18} className="ty-spin" />
+                  Submitting…
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={18} />
+                  Submit Feedback
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Footer */}
+          <p className="ty-footer-note">
+            Your feedback helps us serve you better. Thank you for dining with us! 🙏
+          </p>
         </div>
       </div>
     </main>

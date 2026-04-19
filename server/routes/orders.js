@@ -4,6 +4,7 @@ const router = express.Router();
 const Order = require("../models/Order");
 const PreviousOrder = require("../models/PreviousOrder");
 const MenuItem = require("../models/MenuItem");
+const WorkflowSession = require("../models/WorkflowSession");
 const auth = require("../middleware/auth");
 const requireRole = require("../middleware/requireRole");
 
@@ -108,18 +109,44 @@ async function getOrdersFromRequest(body) {
   return [];
 }
 
+async function findActiveWorkflowForTable(tableId) {
+  if (!tableId) return null;
+  return WorkflowSession.findOne({
+    tableId,
+    status: "active",
+    roleScope: "user",
+  }).sort({ updatedAt: -1 });
+}
+
 // CREATE order
 router.post("/create", auth, async (req, res) => {
   try {
     const { email, phone, items, totalCost, tableNo } = req.body;
+    const requesterRole = String(req.user?.role || "").toLowerCase();
+    const normalizedTableNo = String(tableNo || "").trim();
+    const activeWorkflow = (requesterRole === "waiter" || requesterRole === "admin") && normalizedTableNo
+      ? await findActiveWorkflowForTable(normalizedTableNo)
+      : null;
+    const effectiveEmail = activeWorkflow?.userEmail || email || req.user?.email || "";
+
+    if (!effectiveEmail) {
+      return res.status(400).json({ message: "No active customer is linked to that table." });
+    }
+
     const newOrder = await Order.create({
-      userEmail: email,
+      userEmail: effectiveEmail,
       phone,
       items,
       totalCost,
-      tableNo,
+      tableNo: normalizedTableNo,
       status: "requested",
     });
+
+    if (activeWorkflow) {
+      await WorkflowSession.findByIdAndUpdate(activeWorkflow._id, {
+        $addToSet: { activeOrderIds: newOrder._id.toString() },
+      });
+    }
 
     const io = req.app.get("io");
     if (io) {
@@ -128,6 +155,12 @@ router.post("/create", auth, async (req, res) => {
         status: normalizeStatus(newOrder.status),
         etaSeconds: getRemainingEtaSeconds(newOrder),
       });
+      if (normalizedTableNo) {
+        io.to(`table_${normalizedTableNo}`).emit("table:order-created", {
+          tableId: normalizedTableNo,
+          orderId: newOrder._id.toString(),
+        });
+      }
     }
 
     res
