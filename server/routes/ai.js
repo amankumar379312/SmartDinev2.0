@@ -35,8 +35,9 @@ const ASSISTANT_TEMPERATURE = Number.isFinite(Number(process.env.AI_ASSISTANT_TE
   : 0.35;
 const RESTAURANT_CONTEXT = String(
   process.env.RESTAURANT_CONTEXT ||
-  "SmartDine is a modern restaurant. Speak like a polite, attentive floor waiter: warm, confident, brief, helpful. Never invent menu items, prices, offers, ingredients, timing, or restaurant policies that are not provided."
+  "SmartDine is a modern restaurant. Speak like a polite, attentive floor waiter: warm, lightly playful, upbeat, brief, and helpful. Be friendly and a little jolly without sounding childish or exaggerated. Never invent menu items, prices, offers, ingredients, timing, or restaurant policies that are not provided."
 ).trim();
+const DIETARY_DISCLAIMER = "I cannot give medical advice, but based on the preferences you mentioned, this may suit you better.";
 
 function summarizeError(error) {
   const status = Number(error?.status || 0);
@@ -76,6 +77,32 @@ function safeJsonParse(text, expectedType = "object") {
 
   try {
     return JSON.parse(cleaned);
+  } catch {
+    return null;
+  }
+}
+
+function repairJsonText(text) {
+  const cleaned = extractJsonText(text, "object");
+  if (!cleaned) return "";
+
+  return cleaned
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)(\s*:)/g, '$1"$2"$3')
+    .replace(/:\s*'([^']*)'/g, ': "$1"')
+    .replace(/,\s*([}\]])/g, "$1");
+}
+
+function safeJsonParseLenient(text, expectedType = "object") {
+  const direct = safeJsonParse(text, expectedType);
+  if (direct) return direct;
+
+  const repaired = repairJsonText(text);
+  if (!repaired) return null;
+
+  try {
+    return JSON.parse(repaired);
   } catch {
     return null;
   }
@@ -149,6 +176,186 @@ function buildMenuLookup(menuItems) {
   return new Map(menuItems.map((item) => [item.name.toLowerCase(), item]));
 }
 
+function normalizePlainText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractBudget(text) {
+  const source = String(text || "").toLowerCase();
+  const rsMatch = source.match(/(?:under|below|within|budget|around|less than|max(?:imum)? of?)\s*(?:rs\.?|rupees?|₹)?\s*(\d{2,5})/i);
+  if (rsMatch) return Number(rsMatch[1]);
+  const currencyAfterMatch = source.match(/(?:₹|rs\.?|rupees?)\s*(\d{2,5})/i);
+  if (currencyAfterMatch) return Number(currencyAfterMatch[1]);
+  return null;
+}
+
+function inferMenuMentions(text, menuItems) {
+  const normalizedText = normalizePlainText(text);
+  if (!normalizedText) return [];
+
+  return menuItems
+    .map((item) => ({ ...item, normalized: normalizePlainText(item.name) }))
+    .filter((item) => item.normalized && normalizedText.includes(item.normalized))
+    .sort((a, b) => b.normalized.length - a.normalized.length);
+}
+
+function detectDietaryProfile(text) {
+  const source = normalizePlainText(text);
+  if (!source) return null;
+
+  return {
+    diabetic: /\bdiabet|sugar|low sugar\b/.test(source),
+    lowSpice: /\blow spice|less spicy|not spicy|mild|no spice\b/.test(source),
+    lowOil: /\blow oil|less oil|oil free|light food\b/.test(source),
+    vegetarian: /\bveg|vegetarian|no meat|no chicken|no fish|no egg\b/.test(source),
+    highProtein: /\bprotein|gym|muscle|fitness\b/.test(source),
+    lowCarb: /\blow carb|less carb|keto\b/.test(source),
+    avoidFried: /\bavoid fried|not fried|grilled only|baked\b/.test(source),
+    soupLike: /\bsoup|light meal|easy to digest|stomach\b/.test(source),
+  };
+}
+
+function scoreDietaryFit(item, profile) {
+  const haystack = normalizePlainText(`${item.name} ${item.category} ${item.description}`);
+  let score = 0;
+
+  if (profile.vegetarian) {
+    if (/\bchicken|fish|egg|meat\b/.test(haystack)) score -= 6;
+    if (/\bpaneer|veg|dal|fruit|corn|tomato\b/.test(haystack)) score += 4;
+  }
+  if (profile.diabetic) {
+    if (/\bgulab|brownie|ice cream|cheesecake|sundae|dessert|sweet|pasta|naan|rice\b/.test(haystack)) score -= 5;
+    if (/\bsoup|paneer|fish|chicken|dal|salad\b/.test(haystack)) score += 3;
+  }
+  if (profile.lowSpice) {
+    if (/\b65|tikka|spicy|masala|tandoori|curry\b/.test(haystack)) score -= 2;
+    if (/\bsoup|salad|fried rice|fruit\b/.test(haystack)) score += 2;
+  }
+  if (profile.lowOil || profile.avoidFried) {
+    if (/\bfried|roll|65|naan|brownie|sundae\b/.test(haystack)) score -= 3;
+    if (/\bsoup|salad|fruit|grill|grilled\b/.test(haystack)) score += 2;
+  }
+  if (profile.highProtein) {
+    if (/\bpaneer|chicken|fish|dal\b/.test(haystack)) score += 3;
+  }
+  if (profile.lowCarb) {
+    if (/\brice|naan|roti|pasta|dessert|cake|jamun\b/.test(haystack)) score -= 3;
+    if (/\bpaneer|fish|chicken|soup\b/.test(haystack)) score += 2;
+  }
+  if (profile.soupLike) {
+    if (/\bsoup|salad|fruit\b/.test(haystack)) score += 3;
+  }
+
+  return score;
+}
+
+function buildDietaryResponse(userMessage, menuItems) {
+  const profile = detectDietaryProfile(userMessage);
+  if (!profile || !Object.values(profile).some(Boolean)) return null;
+
+  const ranked = menuItems
+    .map((item) => ({ item, score: scoreDietaryFit(item, profile) }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score || a.item.price - b.item.price);
+
+  if (!ranked.length) {
+    return {
+      message: `${DIETARY_DISCLAIMER} Please check with your doctor if you need strict medical guidance, and I can still show the lighter menu options we have.`,
+      actions: [{ type: "show_menu" }],
+      suggestions: ["Light options", "Full menu", "My cart"],
+    };
+  }
+
+  const picks = ranked.slice(0, 3).map((entry) => entry.item);
+  const primary = picks[0];
+  return {
+    message: `${DIETARY_DISCLAIMER} ${primary.name} may suit you better from our current menu, and ${picks.slice(1).map((item) => item.name).join(" and ")} are also reasonable options to consider.`,
+    actions: [],
+    suggestions: picks.map((item) => item.name),
+  };
+}
+
+function buildBudgetResponse(userMessage, menuItems) {
+  const budget = extractBudget(userMessage);
+  if (!budget) return null;
+
+  const affordable = menuItems
+    .filter((item) => item.price > 0 && item.price <= budget)
+    .sort((a, b) => b.price - a.price || a.name.localeCompare(b.name));
+
+  if (!affordable.length) {
+    return {
+      message: `I do not have a full meal under Rs ${budget} from the current menu, but I can show the closest low-cost options.`,
+      actions: [{ type: "show_menu" }],
+      suggestions: ["Show budget items", "Full menu", "My cart"],
+    };
+  }
+
+  const topPicks = affordable.slice(0, 3);
+  const pickNames = topPicks.map((item) => item.name);
+  return {
+    message: `Under Rs ${budget}, I would suggest ${pickNames.join(", ")}. ${topPicks[0].name} is the strongest pick for value from the current menu.`,
+    actions: [{
+      type: "ask_choice",
+      options: topPicks.map((item) => ({
+        label: item.name,
+        value: item.name,
+        meta: `Rs ${item.price} · ${item.category}`,
+      })),
+    }],
+    suggestions: pickNames,
+  };
+}
+
+function buildResponseFromPlainText(rawText, userMessage, menuItems) {
+  const text = String(rawText || "").trim();
+  if (!text) return null;
+
+  const dietaryResponse = buildDietaryResponse(`${userMessage} ${text}`, menuItems);
+  if (dietaryResponse) return dietaryResponse;
+
+  const budgetResponse = buildBudgetResponse(`${userMessage} ${text}`, menuItems);
+  if (budgetResponse) return budgetResponse;
+
+  const normalizedRaw = normalizePlainText(text);
+  if (!normalizedRaw) return null;
+
+  if (/\bmenu\b/.test(normalizedRaw)) {
+    return {
+      message: "Certainly. I can open the menu so you can browse everything available right now.",
+      actions: [{ type: "show_menu" }],
+      suggestions: ["Full menu", "Budget picks", "My cart"],
+    };
+  }
+
+  if (/\bcart|checkout|bill\b/.test(normalizedRaw)) {
+    return {
+      message: "I can open your cart so you can review the order and total.",
+      actions: [{ type: "open_cart" }],
+      suggestions: ["My cart", "Add more items", "Place order"],
+    };
+  }
+
+  const mentions = inferMenuMentions(`${text} ${userMessage}`, menuItems);
+  if (mentions.length) {
+    return {
+      message: text,
+      actions: mentions.slice(0, 3).map((item) => ({ type: "add_to_cart", item: item.name, qty: 1 })),
+      suggestions: mentions.slice(0, 3).map((item) => item.name),
+    };
+  }
+
+  return {
+    message: text,
+    actions: [],
+    suggestions: ["Full menu", "My cart"],
+  };
+}
+
 function sanitizeSuggestions(suggestions) {
   return (Array.isArray(suggestions) ? suggestions : [])
     .map((value) => String(value || "").trim())
@@ -182,7 +389,16 @@ function sanitizeAssistantActions(actions, menuItems) {
 
     if (type === "ask_choice") {
       const options = (Array.isArray(action.options) ? action.options : [])
-        .map((option) => String(option || "").trim())
+        .map((option) => {
+          if (option && typeof option === "object") {
+            const label = String(option.label || option.value || "").trim();
+            const value = String(option.value || option.label || "").trim();
+            const meta = String(option.meta || "").trim();
+            return label && value ? { label, value, meta } : null;
+          }
+          const value = String(option || "").trim();
+          return value ? { label: value, value, meta: "" } : null;
+        })
         .filter(Boolean)
         .slice(0, 3);
       sanitized.push({ type, options });
@@ -208,6 +424,16 @@ function sanitizeAssistantResponse(parsed, menuItems) {
   };
 }
 
+function tryParseAssistantResponse(rawText, menuItems, userMessage) {
+  const strictParsed = sanitizeAssistantResponse(safeJsonParse(rawText, "object"), menuItems);
+  if (strictParsed) return strictParsed;
+
+  const repairedParsed = sanitizeAssistantResponse(safeJsonParseLenient(rawText, "object"), menuItems);
+  if (repairedParsed) return repairedParsed;
+
+  return buildResponseFromPlainText(rawText, userMessage, menuItems);
+}
+
 function buildAssistantPrompt({ message, guestName, tableId, cartItems, menuItems }) {
   const menuBlock = menuItems
     .map((item) => `- ${item.name} | category=${item.category} | price=Rs ${item.price} | desc=${item.description || "NA"}`)
@@ -225,9 +451,11 @@ You are Nova, the restaurant's AI waiter.
 GOALS:
 - Help the guest order from the provided menu only.
 - Keep a consistent waiter tone: warm, grounded, clear, not overexcited.
+- Sound friendly, lightly jolly, and interactive, like a good waiter who enjoys helping.
 - Engage naturally, but keep replies concise and useful.
 - Never hallucinate dishes, prices, ingredients, discounts, availability, or restaurant facts.
 - If the user asks about something not in the menu/context, say that clearly and guide them to valid options.
+- If the guest asks for diet, allergy, health, or medical-based suggestions, do not give medical advice or guarantees. Say you cannot give medical advice, then offer menu options that may suit them better based only on the menu/context.
 
 RESPONSE FORMAT:
 Return ONLY one valid JSON object.
@@ -255,6 +483,7 @@ STRICT RULES:
 - If the guest mentions multiple menu items, include multiple actions.
 - Keep suggestions short, relevant, and grounded in MENU/cart context.
 - If uncertain, ask a clarifying question using message and ask_choice.
+- If the guest says something casual or random, respond in a friendly human way and gently steer the conversation back toward menu help or ordering.
 
 CONTEXT:
 Guest=${guestName || "Guest"}
@@ -278,7 +507,7 @@ function buildAssistantFallback(message, menuItems) {
   if (matchedItem && /\b(add|order|want|have|get|bring)\b/.test(text)) {
     actions.push({ type: "add_to_cart", item: matchedItem.name });
     return {
-      message: `${matchedItem.name} is a solid choice. I've added it to your cart.`,
+      message: `${matchedItem.name} is a lovely choice. I've added it to your cart for you.`,
       actions,
       suggestions: ["My cart", "Suggest pairing", "Add another item"],
     };
@@ -287,7 +516,7 @@ function buildAssistantFallback(message, menuItems) {
   if (/\b(cart|checkout|bill)\b/.test(text)) {
     actions.push({ type: "open_cart" });
     return {
-      message: "Opening your cart now.",
+      message: "Of course. Opening your cart now.",
       actions,
       suggestions,
     };
@@ -296,17 +525,44 @@ function buildAssistantFallback(message, menuItems) {
   if (/\b(menu|show)\b/.test(text)) {
     actions.push({ type: "show_menu" });
     return {
-      message: "Here is the menu. You can add anything you like from there.",
+      message: "Absolutely. Here is the menu, and you can pick anything you like from there.",
       actions,
       suggestions,
+    };
+  }
+
+  if (/\b(hi|hello|hey|yo|hola|good morning|good afternoon|good evening)\b/.test(text)) {
+    return {
+      message: "Hello. I'm right here and happy to help. If you'd like, I can suggest something tasty, budget-friendly, or a little indulgent.",
+      actions: [],
+      suggestions: ["Chef's pick", "Budget picks", "Full menu"],
+    };
+  }
+
+  if (/\b(thank|thanks|awesome|great|nice|cool|love that)\b/.test(text)) {
+    return {
+      message: "Always a pleasure. If you'd like, I can suggest a pairing or help you wrap up the order as well.",
+      actions: [],
+      suggestions: ["Suggest pairing", "My cart", "Place order"],
+    };
+  }
+
+  if (/\b(joke|funny|bored|surprise me|random)\b/.test(text)) {
+    const featuredFun = menuItems.slice(0, 3).map((item) => item.name);
+    return {
+      message: featuredFun.length
+        ? `Keeping it interesting, I see. If you'd like a fun place to start, I'd look at ${featuredFun.join(", ")}.`
+        : "Keeping it interesting, I see. I can still help you find something fun from the menu.",
+      actions: [],
+      suggestions: ["Chef's pick", "Something spicy", "Budget picks"],
     };
   }
 
   const featured = menuItems.slice(0, 3).map((item) => item.name);
   return {
     message: featured.length
-      ? `I can help with that. Popular picks right now are ${featured.join(", ")}.`
-      : "I can help you browse the menu or add items to your cart.",
+      ? `Happy to help. Popular picks right now are ${featured.join(", ")}. Tell me the kind of meal you're in the mood for, and I'll narrow it down nicely.`
+      : "Happy to help. I can guide you through the menu, suggest something fun, or help you add items to your cart.",
     actions,
     suggestions,
   };
@@ -363,13 +619,14 @@ async function generateAssistantJson({ message, guestName, tableId, cartItems, m
           rawLength: text.length,
         });
 
-        const parsed = sanitizeAssistantResponse(safeJsonParse(text, "object"), menuItems);
+        const parsed = tryParseAssistantResponse(text, menuItems, message);
         if (parsed) {
           logAiAttempt("assistant", {
             keyIndex: clientIndex + 1,
             modelName,
             stage: "parse_success",
             durationMs: Date.now() - startedAt,
+            reason: "strict_or_salvaged",
           });
           return parsed;
         }

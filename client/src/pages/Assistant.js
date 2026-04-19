@@ -383,6 +383,18 @@ function applyAiActions(actions, handlers) {
   return { shouldOrder, choices };
 }
 
+function normalizeChoiceValue(choice) {
+  if (choice && typeof choice === "object") {
+    return {
+      label: String(choice.label || choice.value || "").trim(),
+      value: String(choice.value || choice.label || "").trim(),
+      meta: String(choice.meta || "").trim(),
+    };
+  }
+  const value = String(choice || "").trim();
+  return { label: value, value, meta: "" };
+}
+
 
 // ════════════════════════════════════════════════════════
 // MODE TOGGLE BUTTON
@@ -1148,17 +1160,19 @@ function ChatMode({
   };
 
   const handleChip = (chip) => {
-    const l = chip.toLowerCase();
+    const choice = normalizeChoiceValue(chip);
+    const rawValue = choice.value || choice.label;
+    const l = rawValue.toLowerCase();
     if (l.includes("full menu") || l.includes("show menu")) {
-      setMessages((p) => [...p, { from: "user", text: chip }]);
+      setMessages((p) => [...p, { from: "user", text: choice.label || rawValue }]);
       setIsMenuOpen(true);
       setMessages((p) => [...p, { from: "bot", text: "Here's everything on our menu! Add what you like 👨‍🍳", suggestions: ["🛒 My cart", "🍽️ Suggest pairing"] }]);
       return;
     }
     if (l.includes("my cart") || l.includes("view cart")) { setIsCartOpen(true); return; }
-    const isItem = menuNames.some((n) => n.toLowerCase() === chip.toLowerCase());
-    if (isItem) { addItem(chip); sendMsg(`I'll have the ${chip}`); return; }
-    sendMsg(chip);
+    const isItem = menuNames.some((n) => n.toLowerCase() === rawValue.toLowerCase());
+    if (isItem) { addItem(rawValue); sendMsg(`I'll have the ${rawValue}`); return; }
+    sendMsg(rawValue);
   };
 
   const toggleMic = () => {
@@ -1312,8 +1326,10 @@ function ChatMode({
               {/* Choice cards */}
               {msg.choices && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
-                  {msg.choices.map((c, idx) => (
-                    <button key={idx} onClick={() => handleChip(c)} className="chip-in"
+                  {msg.choices.map((choice, idx) => {
+                    const normalizedChoice = normalizeChoiceValue(choice);
+                    return (
+                    <button key={idx} onClick={() => handleChip(normalizedChoice)} className="chip-in"
                       style={{
                         animationDelay: `${idx * 75}ms`, opacity: 0,
                         padding: "12px 14px", borderRadius: 14,
@@ -1324,7 +1340,12 @@ function ChatMode({
                       onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(232,97,10,0.4)"; e.currentTarget.style.background = C.orangeDim; }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = C.card; }}
                     >
-                      <span style={{ fontSize: 13.5, fontWeight: 500, color: C.text }}>{c}</span>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: normalizedChoice.meta ? 3 : 0 }}>
+                        <span style={{ fontSize: 13.5, fontWeight: 600, color: C.text, textAlign: "left" }}>{normalizedChoice.label}</span>
+                        {normalizedChoice.meta && (
+                          <span style={{ fontSize: 11.5, color: C.mutedMid, textAlign: "left" }}>{normalizedChoice.meta}</span>
+                        )}
+                      </div>
                       <div style={{
                         width: 22, height: 22, borderRadius: 8, flexShrink: 0,
                         background: C.orangeDim,
@@ -1335,7 +1356,8 @@ function ChatMode({
                         </svg>
                       </div>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
