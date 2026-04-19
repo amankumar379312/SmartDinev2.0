@@ -1,7 +1,39 @@
 const express = require('express');
 const router = express.Router();
 const Table = require('../models/Table');
+const Order = require('../models/Order');
 const auth = require('../middleware/auth');
+
+function hasBlockingOrders(orders = []) {
+  return orders.some((order) => {
+    const status = String(order.status || '').trim().toLowerCase();
+    return status !== 'paid' && status !== 'completed';
+  });
+}
+
+async function ensureTableCanBeCleared(table) {
+  if (!table) {
+    return { ok: false, status: 404, body: { msg: 'Table not found' } };
+  }
+
+  const occupiedAt = table.occupiedAt ? new Date(table.occupiedAt) : null;
+  const query = { tableNo: table.tableId };
+
+  if (occupiedAt && !Number.isNaN(occupiedAt.getTime())) {
+    query.createdAt = { $gte: occupiedAt };
+  }
+
+  const relatedOrders = await Order.find(query).lean();
+  if (hasBlockingOrders(relatedOrders)) {
+    return {
+      ok: false,
+      status: 400,
+      body: { msg: 'This table still has active orders and cannot be cleared yet.' },
+    };
+  }
+
+  return { ok: true };
+}
 
 // get all tables
 router.get('/', async (req, res) => {
@@ -104,8 +136,12 @@ router.post('/init', async (req, res) => {
 // clear a table by mongo _id (waiter dashboard "Clear Table" button)
 router.patch('/clear/:id', auth, async (req, res) => {
   try {
+    const existingTable = await Table.findById(req.params.id);
+    const validation = await ensureTableCanBeCleared(existingTable);
+    if (!validation.ok) return res.status(validation.status).json(validation.body);
+
     const updated = await Table.findByIdAndUpdate(
-      req.params.id,
+      existingTable._id,
       { status: 'available', heldBy: null, holdExpiresAt: null, occupiedAt: null },
       { new: true }
     );
@@ -118,8 +154,12 @@ router.patch('/clear/:id', auth, async (req, res) => {
 // clear a table by tableId string (Bill.js after payment)
 router.patch('/clear-by-tableid/:tableId', auth, async (req, res) => {
   try {
+    const existingTable = await Table.findOne({ tableId: req.params.tableId });
+    const validation = await ensureTableCanBeCleared(existingTable);
+    if (!validation.ok) return res.status(validation.status).json(validation.body);
+
     const updated = await Table.findOneAndUpdate(
-      { tableId: req.params.tableId },
+      { tableId: existingTable.tableId },
       { status: 'available', heldBy: null, holdExpiresAt: null, occupiedAt: null },
       { new: true }
     );

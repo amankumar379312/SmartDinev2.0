@@ -1,7 +1,13 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useRef, useState } from "react";
+import { io } from "socket.io-client";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import API from "../api";
 import { clearSession } from "../utils/authSession";
+import { getAfterOrderStorageKey } from "../utils/workflowSession";
+import { resolveSocketBaseUrl } from "../utils/runtimeConfig";
+
+const socket = io(resolveSocketBaseUrl(), { transports: ["websocket"] });
+
 function Stars({ value, onChange }) {
   return (
     <div className="flex items-center gap-2" role="radiogroup" aria-label="rating">
@@ -15,7 +21,7 @@ function Stars({ value, onChange }) {
           }`}
           onClick={() => onChange(n)}
         >
-          ★
+          *
         </button>
       ))}
     </div>
@@ -24,6 +30,8 @@ function Stars({ value, onChange }) {
 
 export default function ThankYou() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const processedRef = useRef(false);
 
   const [ratings, setRatings] = useState({
     foodQuality: 0,
@@ -33,6 +41,49 @@ export default function ThankYou() {
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState("");
+  const [paymentFinalizing, setPaymentFinalizing] = useState(false);
+
+  useEffect(() => {
+    const sessionId = searchParams.get("session_id");
+    const orderIds = String(searchParams.get("orderIds") || "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+    const tableId = searchParams.get("tableId") || localStorage.getItem("tableId") || "";
+
+    if (!sessionId || orderIds.length === 0 || processedRef.current) {
+      return;
+    }
+
+    processedRef.current = true;
+    setPaymentFinalizing(true);
+
+    (async () => {
+      try {
+        const { data: session } = await API.get(`/payment/checkout-session/${sessionId}`);
+        if (session?.payment_status !== "paid") {
+          throw new Error("Payment was not completed successfully.");
+        }
+
+        await API.post("/orders/markPaid/bulk", { orderIds });
+
+        localStorage.removeItem(getAfterOrderStorageKey(tableId));
+
+        socket.emit("table:paid", {
+          tableId: tableId || "-",
+          orderId: orderIds[orderIds.length - 1] || null,
+          total: Number(session?.amount_total || 0) / 100,
+        });
+
+        await API.delete("/workflow/current").catch(() => {});
+      } catch (error) {
+        console.error("Failed to finalize payment on thank-you page", error);
+        setMsg(error?.response?.data?.msg || error?.message || "Payment was received, but finalizing the order failed.");
+      } finally {
+        setPaymentFinalizing(false);
+      }
+    })();
+  }, [searchParams]);
 
   useEffect(() => {
     API.delete("/workflow/current").catch((error) => {
@@ -71,7 +122,6 @@ export default function ThankYou() {
 
   return (
     <main className="min-h-screen bg-[#020617] flex items-center justify-center p-4 sm:p-8 font-sans selection:bg-orange-500 selection:text-white relative">
-      {/* BACKGROUND */}
       <div className="fixed inset-0 z-0">
         <div className="absolute inset-0 bg-gradient-to-b from-[#020617] via-[#020617] to-[#020617]" />
       </div>
@@ -79,10 +129,13 @@ export default function ThankYou() {
       <div className="relative z-10 w-full max-w-xl bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden p-6 sm:p-10">
         <header className="text-center mb-10">
           <div className="mx-auto w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mb-6 border border-green-500/20 shadow-[0_0_30px_rgba(34,197,94,0.15)]">
-            <span className="text-3xl">🍽️</span>
+            <span className="text-3xl">TY</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mb-2">Thank You!</h1>
           <p className="text-sm font-medium text-slate-400">We value your feedback to improve our service.</p>
+          {paymentFinalizing && (
+            <p className="mt-4 text-sm font-semibold text-orange-400">Finalizing your payment and table status...</p>
+          )}
         </header>
 
         <section className="space-y-8 mb-8">
@@ -123,24 +176,24 @@ export default function ThankYou() {
         )}
 
         <div className="flex flex-col-reverse sm:flex-row items-center gap-3">
-          <button 
+          <button
             className="w-full sm:w-1/3 py-3.5 rounded-xl text-slate-400 font-bold hover:text-white hover:bg-white/5 transition-all outline-none"
-            onClick={onSkip} 
-            disabled={submitting}
+            onClick={onSkip}
+            disabled={submitting || paymentFinalizing}
           >
             Skip
           </button>
-          <button 
+          <button
             className="w-full sm:w-2/3 py-3.5 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white font-bold shadow-lg shadow-orange-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 outline-none"
-            onClick={onSubmit} 
-            disabled={submitting}
+            onClick={onSubmit}
+            disabled={submitting || paymentFinalizing}
           >
-            {submitting ? "Submitting…" : "Submit Feedback"}
+            {submitting ? "Submitting..." : "Submit Feedback"}
           </button>
         </div>
 
         <div className="mt-8 pt-6 border-t border-white/5 text-center">
-          <p className="text-xs font-medium text-slate-500 tracking-wide">Your feedback helps us serve you better ❤️</p>
+          <p className="text-xs font-medium text-slate-500 tracking-wide">Your feedback helps us serve you better.</p>
         </div>
       </div>
     </main>

@@ -132,13 +132,25 @@ export default function WaiterDashboard() {
       });
     };
 
+    const handleTableCleared = ({ tableId }) => {
+      setCleanRequests(prev => prev.filter(c => c.tableId !== tableId));
+      setWaiterCalls(prev => prev.filter(c => c.tableId !== tableId));
+      setAllTables(prev => prev.map((table) => (
+        table.tableId === tableId
+          ? { ...table, status: "available", heldBy: null, holdExpiresAt: null, occupiedAt: null }
+          : table
+      )));
+    };
+
     socket.on("waiter:called", handleWaiterCalled);
     socket.on("table:clean", handleTableClean);
+    socket.on("tableCleared", handleTableCleared);
 
     return () => {
       socket.off("connect", joinWaiters);
       socket.off("waiter:called", handleWaiterCalled);
       socket.off("table:clean", handleTableClean);
+      socket.off("tableCleared", handleTableCleared);
     };
   }, []);
 
@@ -163,18 +175,20 @@ export default function WaiterDashboard() {
     setCleanRequests(prev => prev.filter(c => c.id !== id));
 
   // ── TABLE CLEAR ───────────────────────────────────────────────────────────
-  const handleCleanClick = (tableMongoId) => {
-    setConfirmCleanOpen(tableMongoId);
+  const handleCleanClick = (table) => {
+    setConfirmCleanOpen(table);
   };
 
   const confirmCleanTable = async () => {
     if (!confirmCleanOpen) return;
     try {
-      await API.patch(`/tables/clear/${confirmCleanOpen}`);
+      await API.patch(`/tables/clear/${confirmCleanOpen._id}`);
+      setCleanRequests(prev => prev.filter(c => c.tableId !== confirmCleanOpen.tableId));
+      setWaiterCalls(prev => prev.filter(c => c.tableId !== confirmCleanOpen.tableId));
       fetchAllTables();
     } catch (e) {
       console.error("Failed to clear table:", e);
-      alert("Could not clear table.");
+      alert(e?.response?.data?.msg || "Could not clear table.");
     } finally {
       setConfirmCleanOpen(null);
     }
@@ -692,7 +706,7 @@ export default function WaiterDashboard() {
                       {/* Clean Button */}
                       {(isOccupied || isHeld || needsClean) && (
                         <button
-                          onClick={() => handleCleanClick(table._id)}
+                          onClick={() => handleCleanClick(table)}
                           className="w-full mt-3 py-1.5 px-3 bg-slate-800/80 hover:bg-emerald-900/50 border border-slate-600/50 hover:border-emerald-500/60 text-slate-300 hover:text-emerald-300 text-[10px] font-bold uppercase tracking-wider rounded-lg flex items-center justify-center gap-1.5 transition-all active:scale-95"
                         >
                           <Sparkles className="w-3 h-3" />
@@ -717,7 +731,7 @@ export default function WaiterDashboard() {
             </div>
             <h3 className="text-xl font-bold text-white mb-2">Clean Table?</h3>
             <p className="text-sm text-slate-400 mb-6">
-              Are you sure you want to clear this table and mark it as available for new guests?
+              Are you sure you want to clear {confirmCleanOpen.tableId} and mark it as available for new guests?
             </p>
             <div className="flex gap-3">
               <button

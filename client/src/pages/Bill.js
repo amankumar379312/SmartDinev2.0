@@ -1,18 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { io } from "socket.io-client";
 import API from "../api";
-import { resolveSocketBaseUrl } from "../utils/runtimeConfig";
 import "../styles/Bill.css";
 import {
   buildWorkflowPayload,
-  getAfterOrderStorageKey,
   readStoredOrderIds,
 } from "../utils/workflowSession";
-
-const SOCKET_URL = resolveSocketBaseUrl();
-
-const socket = io(SOCKET_URL, { transports: ["websocket"] });
 
 export default function Bill() {
   const location = useLocation();
@@ -107,34 +100,18 @@ export default function Bill() {
       const paymentRes = await API.post("/payment/create-checkout-session", { orderIds: summary.orderIds });
       const url = paymentRes.data?.url;
 
-      await API.post("/orders/markPaid/bulk", { orderIds: summary.orderIds });
+      if (redirectedRef.current) return;
+      redirectedRef.current = true;
 
-      if (tableId) {
-        try {
-          await API.patch(`/tables/clear-by-tableid/${tableId}`);
-        } catch (clearErr) {
-          console.warn("Could not clear table after payment:", clearErr);
-        }
+      if (url) {
+        window.location.href = url;
+        return;
       }
 
-      localStorage.removeItem(getAfterOrderStorageKey(tableId));
-      await API.delete("/workflow/current");
-
-      const doRedirect = () => {
-        if (redirectedRef.current) return;
-        redirectedRef.current = true;
-        if (url) window.location.href = url;
-        else alert("Payment link not received.");
-      };
-
-      socket.emit("table:paid", {
-        tableId: tableId || summary.tableNo || "—",
-        orderId: summary.orderIds[summary.orderIds.length - 1] || null,
-        total: summary.total,
-      });
-
-      setTimeout(doRedirect, 600);
+      redirectedRef.current = false;
+      alert("Payment link not received.");
     } catch (err) {
+      redirectedRef.current = false;
       console.error(err);
       alert("Failed to initiate payment");
     }
@@ -142,7 +119,6 @@ export default function Bill() {
 
   return (
     <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4 sm:p-8 font-sans selection:bg-orange-500 selection:text-white relative">
-      {/* BACKGROUND */}
       <div className="fixed inset-0 z-0">
         <div className="absolute inset-0 bg-gradient-to-b from-[#020617] via-[#020617] to-[#020617]" />
       </div>
@@ -150,7 +126,7 @@ export default function Bill() {
       <div className="relative z-10 w-full max-w-xl bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden p-6 sm:p-10">
         <div className="text-center mb-8">
           <div className="mx-auto w-16 h-16 bg-orange-500/10 rounded-full flex items-center justify-center mb-4 border border-orange-500/20 shadow-[0_0_30px_rgba(249,115,22,0.15)]">
-            <span className="text-3xl">🧾</span>
+            <span className="text-3xl">Bill</span>
           </div>
           <h1 className="text-3xl font-black text-white tracking-tight">Your Bill</h1>
           <p className="text-sm font-medium text-slate-400 mt-2">Please review your order details</p>
@@ -159,11 +135,11 @@ export default function Bill() {
         <div className="grid grid-cols-2 gap-4 mb-8 bg-black/30 p-5 rounded-2xl border border-white/5">
           <div>
             <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-1 font-bold">Email</p>
-            <p className="text-sm text-slate-300 font-medium truncate">{summary.userEmail || "—"}</p>
+            <p className="text-sm text-slate-300 font-medium truncate">{summary.userEmail || "-"}</p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-1 font-bold">Table No</p>
-            <p className="text-sm text-white font-bold">{summary.tableNo || tableId || "—"}</p>
+            <p className="text-sm text-white font-bold">{summary.tableNo || tableId || "-"}</p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-1 font-bold">Total Items</p>
@@ -171,7 +147,7 @@ export default function Bill() {
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-1 font-bold">Date & Time</p>
-            <p className="text-sm text-slate-300 font-medium">{summary.placedAt ? new Date(summary.placedAt).toLocaleString() : "—"}</p>
+            <p className="text-sm text-slate-300 font-medium">{summary.placedAt ? new Date(summary.placedAt).toLocaleString() : "-"}</p>
           </div>
         </div>
 
@@ -187,7 +163,7 @@ export default function Bill() {
                   <span className="text-sm text-slate-200">{item.name}</span>
                 </div>
                 <div className="text-sm font-bold text-white">
-                  ₹{item.lineTotal}
+                  Rs {item.lineTotal}
                 </div>
               </div>
             ))}
@@ -197,11 +173,11 @@ export default function Bill() {
         <div className="flex items-end justify-between p-5 bg-gradient-to-r from-orange-500/10 to-transparent border-l-4 border-orange-500 rounded-xl mb-8">
           <div>
              <p className="text-xs font-bold text-orange-400 uppercase tracking-widest mb-1">Total Amount</p>
-             <p className="text-3xl font-black text-white leading-none">₹{summary.total}</p>
+             <p className="text-3xl font-black text-white leading-none">Rs {summary.total}</p>
           </div>
         </div>
 
-        <button 
+        <button
           onClick={handlePayment}
           className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white font-bold text-lg shadow-lg shadow-orange-500/30 transition-all hover:-translate-y-1"
         >

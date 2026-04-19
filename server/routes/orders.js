@@ -14,6 +14,7 @@ function normalizeStatus(status) {
   if (s === "preparing") return "preparing";
   if (s === "ready" || s === "cooked") return "cooked";
   if (s === "served" || s === "completed") return "served";
+  if (s === "paid") return "paid";
   return "waiting";
 }
 
@@ -294,16 +295,25 @@ router.post("/markPaid/bulk", auth, async (req, res) => {
     const summary = await buildOrderSummary(orders);
     const created = await Promise.all(
       orders.map(async (order) =>
-        PreviousOrder.create({
-          orderId: order._id,
-          userEmail: order.userEmail,
-          tableNo: order.tableNo,
-          items: order.items,
-          totalCost: await calculateOrderTotal(order),
-          status: "paid",
-          createdAt: order.createdAt,
-        })
+        PreviousOrder.findOneAndUpdate(
+          { orderId: order._id },
+          {
+            orderId: order._id,
+            userEmail: order.userEmail,
+            tableNo: order.tableNo,
+            items: order.items,
+            totalCost: await calculateOrderTotal(order),
+            status: "paid",
+            createdAt: order.createdAt,
+          },
+          { new: true, upsert: true, setDefaultsOnInsert: true }
+        )
       )
+    );
+
+    await Order.updateMany(
+      { _id: { $in: orders.map((order) => order._id) } },
+      { $set: { status: "paid", etaSeconds: null, etaAssignedAt: null } }
     );
 
     return res.status(201).json({ message: "Orders marked as paid", orders: created, summary });

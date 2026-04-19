@@ -1,5 +1,6 @@
 function firstValidHttpUrl(values, fallback = "") {
-  const match = values.find((value) => /^https?:\/\//i.test(String(value || "").trim()));
+  const list = Array.isArray(values) ? values : [values];
+  const match = list.find((value) => /^https?:\/\//i.test(String(value || "").trim()));
   return match || fallback;
 }
 
@@ -40,9 +41,7 @@ export function resolveApiBaseUrl() {
     return `${stripApiSuffix(socketBaseUrl)}/api`;
   }
 
-  return firstValidHttpUrl(
-    "http://localhost:5000/api"
-  );
+  return firstValidHttpUrl(["http://localhost:5000/api"]);
 }
 
 export function resolveSocketBaseUrl() {
@@ -74,7 +73,5 @@ export function resolveSocketBaseUrl() {
     return stripApiSuffix(apiBaseUrl);
   }
 
-  return firstValidHttpUrl(
-    "http://localhost:5000"
-  );
+  return firstValidHttpUrl(["http://localhost:5000"]);
 }

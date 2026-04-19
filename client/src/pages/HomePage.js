@@ -246,7 +246,7 @@ const Footer = () => {
           <h4 className="mb-6 text-sm font-bold uppercase tracking-wider text-white">Quick Links</h4>
           <ul className="space-y-3 text-sm">
             <li>
-              <button className="transition-colors hover:text-orange-500" onClick={() => navigate('/login')}>
+              <button className="transition-colors hover:text-orange-500" onClick={() => navigate('/menu')}>
                 Show Menu
               </button>
             </li>
@@ -320,7 +320,7 @@ export default function HomePage() {
                 className="h-14 px-8 text-lg"
                 fullWidth={false}
                 icon={ArrowRight}
-                onClick={() => navigate('/login')}
+                onClick={() => navigate('/menu')}
               >
                 Show Menu
               </Button>
