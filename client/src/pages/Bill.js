@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { io } from "socket.io-client";
 import API from "../api";
 import "../styles/Bill.css";
 import {
   buildWorkflowPayload,
   readStoredOrderIds,
 } from "../utils/workflowSession";
+import { resolveSocketBaseUrl } from "../utils/runtimeConfig";
 import {
   UtensilsCrossed,
   Receipt,
@@ -18,8 +20,11 @@ import {
   Sparkles,
 } from "lucide-react";
 
+const socket = io(resolveSocketBaseUrl(), { transports: ["websocket"] });
+
 export default function Bill() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { state } = location;
   const tableId = localStorage.getItem("tableId") || "T-01";
   const requestedOrderIds = useMemo(
@@ -84,6 +89,23 @@ export default function Bill() {
       cancelled = true;
     };
   }, [location.hash, location.pathname, location.search, requestedOrderIds, state, tableId]);
+
+  useEffect(() => {
+    socket.emit("joinTableRoom", tableId);
+
+    const onPaymentComplete = ({ tableId: paidTableId, orderIds = [], paymentMethod }) => {
+      if (paidTableId !== tableId) return;
+      const nextOrderIds = Array.isArray(orderIds) && orderIds.length ? orderIds : requestedOrderIds;
+      navigate(`/thank-you?cash=${paymentMethod === "cash" ? 1 : 0}&tableId=${encodeURIComponent(tableId)}&orderIds=${encodeURIComponent(nextOrderIds.join(","))}`, {
+        replace: true,
+      });
+    };
+
+    socket.on("table:payment-complete", onPaymentComplete);
+    return () => {
+      socket.off("table:payment-complete", onPaymentComplete);
+    };
+  }, [navigate, requestedOrderIds, tableId]);
 
   const totalItems = useMemo(
     () => (summary?.items || []).reduce((sum, item) => sum + item.qty, 0),

@@ -1,10 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
-import { io } from "socket.io-client";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import API from "../api";
 import { clearSession, getLoginPathForRoleScope } from "../utils/authSession";
 import { getAfterOrderStorageKey } from "../utils/workflowSession";
-import { resolveSocketBaseUrl } from "../utils/runtimeConfig";
 import "../styles/thankyou.css";
 import {
   UtensilsCrossed,
@@ -15,8 +13,6 @@ import {
   MessageSquare,
   LogOut,
 } from "lucide-react";
-
-const socket = io(resolveSocketBaseUrl(), { transports: ["websocket"] });
 
 function Stars({ value, onChange }) {
   const [hovered, setHovered] = useState(0);
@@ -62,13 +58,25 @@ export default function ThankYou() {
 
   useEffect(() => {
     const sessionId = searchParams.get("session_id");
+    const isCashFlow = searchParams.get("cash") === "1";
     const orderIds = String(searchParams.get("orderIds") || "")
       .split(",")
       .map((id) => id.trim())
       .filter(Boolean);
     const tableId = searchParams.get("tableId") || localStorage.getItem("tableId") || "";
 
-    if (!sessionId || orderIds.length === 0 || processedRef.current) {
+    if (processedRef.current || orderIds.length === 0) {
+      return;
+    }
+
+    if (isCashFlow) {
+      processedRef.current = true;
+      localStorage.removeItem(getAfterOrderStorageKey(tableId));
+      API.delete("/workflow/current").catch(() => {});
+      return;
+    }
+
+    if (!sessionId) {
       return;
     }
 
@@ -85,12 +93,6 @@ export default function ThankYou() {
         await API.post("/orders/markPaid/bulk", { orderIds });
 
         localStorage.removeItem(getAfterOrderStorageKey(tableId));
-
-        socket.emit("table:paid", {
-          tableId: tableId || "-",
-          orderId: orderIds[orderIds.length - 1] || null,
-          total: Number(session?.amount_total || 0) / 100,
-        });
 
         await API.delete("/workflow/current").catch(() => {});
       } catch (error) {

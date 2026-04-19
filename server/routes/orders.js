@@ -118,6 +118,88 @@ async function findActiveWorkflowForTable(tableId) {
   }).sort({ updatedAt: -1 });
 }
 
+async function markOrdersPaidAndNotify({ req, orders, paymentMethod = "online" }) {
+  if (!orders.length) {
+    return { summary: null, created: [] };
+  }
+
+  const summary = await buildOrderSummary(orders);
+  const created = await Promise.all(
+    orders.map(async (order) =>
+      PreviousOrder.findOneAndUpdate(
+        { orderId: order._id },
+        {
+          orderId: order._id,
+          userEmail: order.userEmail,
+          tableNo: order.tableNo,
+          items: order.items,
+          totalCost: await calculateOrderTotal(order),
+          status: "paid",
+          createdAt: order.createdAt,
+        },
+        { new: true, upsert: true, setDefaultsOnInsert: true }
+      )
+    )
+  );
+
+  await Order.updateMany(
+    { _id: { $in: orders.map((order) => order._id) } },
+    { $set: { status: "paid", etaSeconds: null, etaAssignedAt: null } }
+  );
+
+  const io = req.app.get("io");
+  if (io) {
+    orders.forEach((order) => {
+      io.to(`order_${order._id}`).emit("order:update", {
+        orderId: order._id.toString(),
+        status: "paid",
+        etaSeconds: null,
+      });
+    });
+
+    if (summary?.tableNo) {
+      io.to(`table_${summary.tableNo}`).emit("table:payment-complete", {
+        tableId: summary.tableNo,
+        orderIds: summary.orderIds,
+        paymentMethod,
+      });
+
+      io.to("waiters").emit("table:clean", {
+        tableId: summary.tableNo,
+        orderId: summary.orderIds[summary.orderIds.length - 1] || null,
+        total: summary.total,
+      });
+    }
+  }
+
+  if (summary?.tableNo) {
+    await WorkflowSession.findOneAndUpdate(
+      {
+        tableId: summary.tableNo,
+        status: "active",
+        roleScope: "user",
+      },
+      {
+        pathname: "/thank-you",
+        search: `?cash=1&tableId=${encodeURIComponent(summary.tableNo)}&orderIds=${encodeURIComponent(summary.orderIds.join(","))}`,
+        hash: "",
+        routeState: {
+          orderIds: summary.orderIds,
+          tableId: summary.tableNo,
+          cash: true,
+          paymentMethod,
+        },
+        currentStep: "feedback",
+        paymentPending: false,
+        activeOrderIds: summary.orderIds,
+      },
+      { new: true }
+    );
+  }
+
+  return { summary, created };
+}
+
 // CREATE order
 router.post("/create", auth, async (req, res) => {
   try {
@@ -325,34 +407,45 @@ router.post("/markPaid/bulk", auth, async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    const summary = await buildOrderSummary(orders);
-    const created = await Promise.all(
-      orders.map(async (order) =>
-        PreviousOrder.findOneAndUpdate(
-          { orderId: order._id },
-          {
-            orderId: order._id,
-            userEmail: order.userEmail,
-            tableNo: order.tableNo,
-            items: order.items,
-            totalCost: await calculateOrderTotal(order),
-            status: "paid",
-            createdAt: order.createdAt,
-          },
-          { new: true, upsert: true, setDefaultsOnInsert: true }
-        )
-      )
-    );
-
-    await Order.updateMany(
-      { _id: { $in: orders.map((order) => order._id) } },
-      { $set: { status: "paid", etaSeconds: null, etaAssignedAt: null } }
-    );
+    const { summary, created } = await markOrdersPaidAndNotify({
+      req,
+      orders,
+      paymentMethod: "online",
+    });
 
     return res.status(201).json({ message: "Orders marked as paid", orders: created, summary });
   } catch (err) {
     console.error("Error marking orders paid in bulk:", err);
     return res.status(500).json({ message: "Failed to mark orders as paid" });
+  }
+});
+
+router.post("/markPaid/cash", auth, requireRole("waiter", "admin"), async (req, res) => {
+  try {
+    const orders = await getOrdersFromRequest(req.body);
+    if (!orders.length) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    const unpaidServedOrders = orders.filter((order) => normalizeStatus(order.status) === "served");
+    if (!unpaidServedOrders.length) {
+      return res.status(400).json({ message: "No served unpaid orders were found for cash collection." });
+    }
+
+    const { summary, created } = await markOrdersPaidAndNotify({
+      req,
+      orders: unpaidServedOrders,
+      paymentMethod: "cash",
+    });
+
+    return res.status(201).json({
+      message: "Cash payment recorded successfully",
+      orders: created,
+      summary,
+    });
+  } catch (err) {
+    console.error("Error marking orders paid by cash:", err);
+    return res.status(500).json({ message: "Failed to record cash payment" });
   }
 });
 

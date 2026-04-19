@@ -4,7 +4,7 @@ import API from "../api";
 import { resolveSocketBaseUrl } from "../utils/runtimeConfig";
 import { menu } from "../data/menu";
 import LogoutButton from "../components/LogoutButton";
-import { RefreshCw, Plus, Check, Clock, User, LayoutGrid, BellRing, X, Trash2, Sparkles, Armchair, UsersRound, Ban, UtensilsCrossed } from "lucide-react";
+import { RefreshCw, Plus, Check, Clock, User, LayoutGrid, BellRing, X, Trash2, Sparkles, Armchair, UsersRound, Ban, UtensilsCrossed, Receipt } from "lucide-react";
 
 // ── SOCKET ────────────────────────────────────────────────────────────────────
 const SOCKET_URL = resolveSocketBaseUrl();
@@ -26,6 +26,7 @@ const getTableIcon = (seats, isOccupied) => {
 
 export default function WaiterDashboard() {
   const [readyOrders, setReadyOrders] = useState([]);
+  const [billReadyTables, setBillReadyTables] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isPosOpen, setIsPosOpen] = useState(false);
   const [cart, setCart] = useState([]);
@@ -46,6 +47,7 @@ export default function WaiterDashboard() {
   // ── Custom Confirm Modal State ──
   const [confirmCleanOpen, setConfirmCleanOpen] = useState(null);
   const [confirmServeOpen, setConfirmServeOpen] = useState(null);
+  const [confirmCashOpen, setConfirmCashOpen] = useState(null);
 
   const normalize = (s) => String(s || "").toLowerCase();
 
@@ -60,7 +62,34 @@ export default function WaiterDashboard() {
       const ready = list
         .filter(o => normalize(o.status) === "ready")
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      const servedUnpaid = list
+        .filter(o => normalize(o.status) === "served")
+        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      const groupedBillReady = Object.values(servedUnpaid.reduce((acc, order) => {
+        const tableKey = order.tableNo || "Walk-in";
+        if (!acc[tableKey]) {
+          acc[tableKey] = {
+            tableNo: tableKey,
+            orderIds: [],
+            userEmail: order.userEmail || "",
+            totalCost: 0,
+            itemCount: 0,
+            ordersCount: 0,
+            latestCreatedAt: order.createdAt || null,
+          };
+        }
+        acc[tableKey].orderIds.push(order._id);
+        acc[tableKey].totalCost += Number(order.totalCost) || 0;
+        acc[tableKey].itemCount += Array.isArray(order.items) ? order.items.length : 0;
+        acc[tableKey].ordersCount += 1;
+        if (!acc[tableKey].userEmail && order.userEmail) acc[tableKey].userEmail = order.userEmail;
+        if (new Date(order.createdAt || 0) > new Date(acc[tableKey].latestCreatedAt || 0)) {
+          acc[tableKey].latestCreatedAt = order.createdAt || null;
+        }
+        return acc;
+      }, {}));
       setReadyOrders(ready);
+      setBillReadyTables(groupedBillReady);
     } catch (e) {
       console.error("Failed to fetch orders:", e);
     } finally {
@@ -207,6 +236,24 @@ export default function WaiterDashboard() {
       console.error("Failed to mark served", e);
     } finally {
       setConfirmServeOpen(null);
+    }
+  };
+
+  const markCashReceived = (billGroup) => {
+    setConfirmCashOpen(billGroup);
+  };
+
+  const confirmCashReceived = async () => {
+    if (!confirmCashOpen?.orderIds?.length) return;
+    try {
+      await API.post("/orders/markPaid/cash", { orderIds: confirmCashOpen.orderIds });
+      setBillReadyTables((prev) => prev.filter((entry) => entry.tableNo !== confirmCashOpen.tableNo));
+      fetchOrders();
+    } catch (e) {
+      console.error("Failed to mark cash received", e);
+      alert(e?.response?.data?.message || "Could not record cash payment.");
+    } finally {
+      setConfirmCashOpen(null);
     }
   };
 
@@ -476,6 +523,76 @@ export default function WaiterDashboard() {
                 <span className="text-white font-bold tracking-wider text-sm">{readyOrders.length} ORDERS READY</span>
               </div>
               {loading && readyOrders.length > 0 && <RefreshCw className="w-5 h-5 text-slate-500 animate-spin" />}
+            </div>
+
+            <div className="mb-8">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="inline-flex items-center gap-3 px-5 py-2.5 bg-slate-900/80 backdrop-blur-md border border-emerald-500/40 rounded-xl shadow-lg">
+                  <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                  <span className="text-white font-bold tracking-wider text-sm">{billReadyTables.length} TABLES READY FOR BILL</span>
+                </div>
+              </div>
+
+              {!loading && billReadyTables.length === 0 && (
+                <div className="mb-6 rounded-2xl border border-slate-700/70 bg-black/30 p-6 text-center">
+                  <Receipt className="mx-auto mb-3 h-10 w-10 text-slate-500" />
+                  <p className="text-slate-200">No served tables waiting for cash collection</p>
+                </div>
+              )}
+
+              {billReadyTables.length > 0 && (
+                <div className="mb-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
+                  {billReadyTables.map((bill) => (
+                    <div key={bill.tableNo} className="rounded-[24px] border border-emerald-500/30 bg-[#0f172a]/90 p-6 shadow-xl shadow-emerald-500/10">
+                      <div className="mb-5 flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Ready For Bill</p>
+                          <h3 className="mt-2 text-2xl font-black text-white">{bill.tableNo}</h3>
+                        </div>
+                        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-emerald-300">
+                          Cash Pending
+                        </div>
+                      </div>
+
+                      <div className="mb-5 grid grid-cols-2 gap-4">
+                        <div className="rounded-2xl border border-slate-700/60 bg-slate-900/70 p-4">
+                          <p className="text-[10px] uppercase tracking-widest text-slate-500">Orders</p>
+                          <p className="mt-2 text-2xl font-black text-white">{bill.ordersCount}</p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-700/60 bg-slate-900/70 p-4">
+                          <p className="text-[10px] uppercase tracking-widest text-slate-500">Items</p>
+                          <p className="mt-2 text-2xl font-black text-white">{bill.itemCount}</p>
+                        </div>
+                      </div>
+
+                      <div className="mb-6 space-y-2 text-sm text-slate-300">
+                        {bill.userEmail && (
+                          <div className="flex items-center gap-2">
+                            <User className="h-4 w-4 text-slate-500" />
+                            <span className="truncate">{bill.userEmail}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-slate-500" />
+                          <span>{bill.latestCreatedAt ? new Date(bill.latestCreatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</span>
+                        </div>
+                      </div>
+
+                      <div className="mb-6 flex items-end justify-between border-t border-slate-700/50 pt-5">
+                        <span className="text-[10px] uppercase tracking-widest text-slate-500">Collect Cash</span>
+                        <span className="text-3xl font-black text-white">₹{bill.totalCost}</span>
+                      </div>
+
+                      <button
+                        onClick={() => markCashReceived(bill)}
+                        className="w-full rounded-xl bg-emerald-500 py-4 text-sm font-black uppercase tracking-[0.16em] text-slate-950 shadow-[0_4px_20px_rgba(16,185,129,0.25)] transition-all hover:-translate-y-0.5 hover:bg-emerald-400"
+                      >
+                        Mark Cash Received
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {loading && readyOrders.length === 0 && (
@@ -774,6 +891,37 @@ export default function WaiterDashboard() {
                 className="flex-1 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2"
               >
                 <Check className="w-4 h-4 stroke-[3]" /> Yes, Served
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmCashOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center transform transition-all">
+            <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4 outline outline-8 outline-emerald-500/5">
+              <Receipt className="w-8 h-8 text-emerald-400" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">Cash Received?</h3>
+            <p className="text-sm text-slate-400 mb-2">
+              Confirm cash payment for <span className="font-bold text-emerald-300">{confirmCashOpen.tableNo}</span>.
+            </p>
+            <p className="text-sm text-slate-500 mb-6">
+              This will complete the order, send the guest to feedback, and notify waiters to clean the table.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmCashOpen(null)}
+                className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-white font-medium transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmCashReceived}
+                className="flex-1 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2"
+              >
+                <Check className="w-4 h-4 stroke-[3]" /> Confirm
               </button>
             </div>
           </div>

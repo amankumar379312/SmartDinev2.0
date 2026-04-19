@@ -70,6 +70,319 @@ button:disabled{opacity:0.45;cursor:not-allowed;}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const MODEL_CHAIN = [];
 
+const NUMBER_WORDS = {
+  a: 1,
+  an: 1,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  couple: 2,
+  pair: 2,
+  double: 2,
+  triple: 3,
+};
+
+function extractJsonText(raw, expectedType = "object") {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+
+  const fencedMatch =
+    text.match(/```json\s*([\s\S]*?)```/i) ||
+    text.match(/```\s*([\s\S]*?)```/i);
+  const source = fencedMatch?.[1] ? fencedMatch[1].trim() : text;
+  if (!source) return "";
+
+  const openChar = expectedType === "array" ? "[" : "{";
+  const closeChar = expectedType === "array" ? "]" : "}";
+  const firstIndex = source.indexOf(openChar);
+  const lastIndex = source.lastIndexOf(closeChar);
+  if (firstIndex !== -1 && lastIndex !== -1 && lastIndex > firstIndex) {
+    return source.slice(firstIndex, lastIndex + 1).trim();
+  }
+
+  return source;
+}
+
+function safeJsonParse(raw, expectedType = "object") {
+  const cleaned = extractJsonText(raw, expectedType);
+  if (!cleaned) return null;
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeQuantity(value) {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.max(1, Math.min(20, Math.round(value)));
+  }
+
+  const text = String(value || "").trim().toLowerCase();
+  if (!text) return 1;
+
+  const direct = Number.parseInt(text, 10);
+  if (Number.isFinite(direct) && direct > 0) return Math.max(1, Math.min(20, direct));
+
+  const token = text.split(/[\s-]+/).find((part) => NUMBER_WORDS[part]);
+  return token ? NUMBER_WORDS[token] : 1;
+}
+
+function inferQuantityFromText(text, itemName = "") {
+  const source = String(text || "").toLowerCase();
+  if (!source) return 1;
+
+  const itemPart = String(itemName || "").toLowerCase().trim();
+  const scoped = itemPart && source.includes(itemPart)
+    ? source.slice(0, source.indexOf(itemPart) + itemPart.length)
+    : source;
+
+  const digitMatch = scoped.match(/(?:^|\b)(\d{1,2})(?:\s*(?:x|times?|plates?|portions?|quantity|quantities|orders?))?/i);
+  if (digitMatch) return normalizeQuantity(digitMatch[1]);
+
+  const wordMatch = scoped.match(/\b(a|an|one|two|three|four|five|six|seven|eight|nine|ten|couple|pair|double|triple)\b/i);
+  return wordMatch ? normalizeQuantity(wordMatch[1]) : 1;
+}
+
+function normalizeName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\b(curries|curry)\b/g, "curry")
+    .replace(/\bquantities|quantity|portions|portion|plates|plate|orders|order|pieces|piece\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveMenuItemName(itemName, menuNames) {
+  const raw = String(itemName || "").trim();
+  if (!raw) return null;
+
+  const exact = menuNames.find((name) => name.toLowerCase() === raw.toLowerCase());
+  if (exact) return exact;
+
+  const normalizedTarget = normalizeName(raw);
+  if (!normalizedTarget) return null;
+
+  const normalizedMap = menuNames.map((name) => ({
+    original: name,
+    normalized: normalizeName(name),
+  }));
+
+  const strictMatch = normalizedMap.find((entry) => entry.normalized === normalizedTarget);
+  if (strictMatch) return strictMatch.original;
+
+  const containsMatch = normalizedMap.find((entry) =>
+    entry.normalized.includes(normalizedTarget) || normalizedTarget.includes(entry.normalized));
+  if (containsMatch) return containsMatch.original;
+
+  const tokens = normalizedTarget.split(" ").filter(Boolean);
+  const tokenMatch = normalizedMap
+    .map((entry) => ({
+      name: entry.original,
+      score: tokens.reduce((score, token) => score + (entry.normalized.includes(token) ? 1 : 0), 0),
+      normalizedLength: entry.normalized.length,
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score || a.normalizedLength - b.normalizedLength)[0];
+
+  return tokenMatch && tokenMatch.score >= Math.min(2, tokens.length) ? tokenMatch.name : null;
+}
+
+function splitIntoIntentChunks(text) {
+  return String(text || "")
+    .replace(/\s+/g, " ")
+    .split(/\b(?:and|then|also|plus|with)\b|,/i)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function extractMenuMentions(text, menuNames) {
+  const source = normalizeName(text);
+  if (!source) return [];
+
+  return menuNames
+    .map((name) => ({
+      name,
+      normalized: normalizeName(name),
+    }))
+    .filter((entry) => {
+      if (!entry.normalized) return false;
+      return source.includes(entry.normalized)
+        || entry.normalized.split(" ").every((token) => source.includes(token));
+    })
+    .sort((a, b) => b.normalized.length - a.normalized.length)
+    .map((entry) => entry.name);
+}
+
+function inferActionsFromText(text, menuNames = []) {
+  const source = String(text || "").trim();
+  if (!source) return [];
+
+  const lower = source.toLowerCase();
+  const actions = [];
+
+  if (/\b(show|open|see|browse)\b.*\bmenu\b|\bfull menu\b/i.test(lower)) {
+    actions.push({ type: "show_menu" });
+  }
+  if (/\b(cart|basket|checkout|bill)\b/i.test(lower)) {
+    actions.push({ type: "open_cart" });
+  }
+  if (/\b(place order|confirm order|checkout now|order now)\b/i.test(lower)) {
+    actions.push({ type: "place_order" });
+  }
+
+  const intentType = /\b(remove|delete|cancel|take off|drop)\b/i.test(lower)
+    ? "remove_from_cart"
+    : /\b(add|order|get|bring|want|have|give|send|need|take)\b/i.test(lower)
+      ? "add_to_cart"
+      : null;
+
+  if (!intentType) return actions;
+
+  const seen = new Set();
+  splitIntoIntentChunks(source).forEach((chunk) => {
+    const matches = extractMenuMentions(chunk, menuNames);
+    matches.forEach((match) => {
+      if (seen.has(`${intentType}:${match}`)) return;
+      seen.add(`${intentType}:${match}`);
+      actions.push({
+        type: intentType,
+        item: match,
+        qty: inferQuantityFromText(chunk, match),
+      });
+    });
+  });
+
+  if (!actions.some((action) => action.type === intentType)) {
+    const wholeSentenceMatches = extractMenuMentions(source, menuNames);
+    wholeSentenceMatches.forEach((match) => {
+      if (seen.has(`${intentType}:${match}`)) return;
+      seen.add(`${intentType}:${match}`);
+      actions.push({
+        type: intentType,
+        item: match,
+        qty: inferQuantityFromText(source, match),
+      });
+    });
+  }
+
+  return actions;
+}
+
+function normalizeAiResponse(payload, userText = "", menuNames = []) {
+  const base = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? payload
+    : safeJsonParse(payload, "object") || {};
+
+  let parsedMessageObject = null;
+  if (typeof base.message === "string") {
+    parsedMessageObject = safeJsonParse(base.message, "object");
+  }
+
+  const source = parsedMessageObject && typeof parsedMessageObject === "object" ? parsedMessageObject : base;
+  const rawActions = Array.isArray(source.actions) ? source.actions : [];
+  const rawSuggestions = Array.isArray(source.suggestions) ? source.suggestions : [];
+  const fallbackMessage = typeof source.message === "string" ? source.message : "";
+
+  const normalizedActions = rawActions.flatMap((action) => {
+    if (!action || typeof action !== "object") return [];
+
+    const entries = [];
+    const candidateItems =
+      Array.isArray(action.items) ? action.items
+        : Array.isArray(action.itemNames) ? action.itemNames
+          : Array.isArray(action.item) ? action.item
+            : action.item != null ? [action.item]
+              : action.name != null ? [action.name]
+                : [];
+
+    if (candidateItems.length && (action.type === "add_to_cart" || action.type === "remove_from_cart")) {
+      candidateItems.forEach((itemValue) => {
+        const itemObject = itemValue && typeof itemValue === "object" ? itemValue : null;
+        const rawItemName = itemObject?.item || itemObject?.name || String(itemValue || "");
+        const resolvedName = resolveMenuItemName(rawItemName, menuNames);
+        if (!resolvedName) return;
+
+        const quantity = normalizeQuantity(
+          itemObject?.qty ??
+          itemObject?.quantity ??
+          action.qty ??
+          action.quantity ??
+          inferQuantityFromText(rawItemName, resolvedName) ??
+          inferQuantityFromText(userText, resolvedName)
+        );
+
+        entries.push({
+          type: action.type,
+          item: resolvedName,
+          qty: quantity,
+        });
+      });
+      return entries;
+    }
+
+    return [action];
+  });
+
+  const inferredActions = inferActionsFromText(
+    `${userText} ${typeof source.message === "string" ? source.message : ""}`,
+    menuNames
+  );
+
+  const mergedActions = [...normalizedActions];
+  inferredActions.forEach((action) => {
+    const exists = mergedActions.some((existing) =>
+      existing?.type === action.type && existing?.item === action.item
+    );
+    if (!exists) mergedActions.push(action);
+  });
+
+  const dedupedSuggestions = rawSuggestions
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .slice(0, 4);
+
+  return {
+    message: fallbackMessage || "I can help with that.",
+    actions: mergedActions,
+    suggestions: dedupedSuggestions.length ? dedupedSuggestions : ["Full menu", "My cart"],
+  };
+}
+
+function applyAiActions(actions, handlers) {
+  let shouldOrder = false;
+  let choices = [];
+
+  for (const action of actions) {
+    if (!action || typeof action !== "object") continue;
+
+    const qty = normalizeQuantity(action.qty ?? action.quantity ?? 1);
+    if (action.type === "add_to_cart" && action.item) {
+      for (let count = 0; count < qty; count += 1) handlers.addItem(action.item);
+    } else if (action.type === "remove_from_cart" && action.item) {
+      for (let count = 0; count < qty; count += 1) handlers.removeItem(action.item);
+    } else if (action.type === "show_menu") {
+      handlers.setIsMenuOpen(true);
+    } else if (action.type === "open_cart") {
+      handlers.setIsCartOpen(true);
+    } else if (action.type === "place_order") {
+      shouldOrder = true;
+    } else if (action.type === "ask_choice" && Array.isArray(action.options)) {
+      choices = action.options;
+    }
+  }
+
+  return { shouldOrder, choices };
+}
+
 
 // ════════════════════════════════════════════════════════
 // MODE TOGGLE BUTTON
@@ -233,14 +546,14 @@ Respond ONLY valid JSON (no markdown, no backticks):
 {"message":"1-2 warm sentences","actions":[],"suggestions":["chip1","chip2","chip3"]}
 
 Action types:
-{"type":"add_to_cart","item":"EXACT name from menu"}
-{"type":"remove_from_cart","item":"EXACT name"}
+{"type":"add_to_cart","item":"EXACT name from menu","qty":2}
+{"type":"remove_from_cart","item":"EXACT name","qty":1}
 {"type":"show_menu"}
 {"type":"place_order"}
 {"type":"open_cart"}
 {"type":"ask_choice","options":["A","B","C"]}
 
-Rules: Only real menu items. On "add X" always add_to_cart. Suggest pairings. 2-3 chips.`;
+Rules: Only real menu items. For quantity requests like "3 fish curry" or "two butter naan", always include qty as a number. You may return multiple add_to_cart actions for multi-item orders. Suggest pairings. 2-3 chips.`;
   }, [menuCatalog, user, currentTableId]);
 
   const modelIdxRef = useRef(0);
@@ -285,11 +598,7 @@ Rules: Only real menu items. On "add X" always add_to_cart. Suggest pairings. 2-
         message: text,
         prompt: buildPrompt(cartSnap),
       });
-      return {
-        message: data?.message || "I'm a bit busy right now! Browse the menu and add items manually.",
-        actions: Array.isArray(data?.actions) ? data.actions : [],
-        suggestions: Array.isArray(data?.suggestions) ? data.suggestions : ["Full menu", "My cart"],
-      };
+      return normalizeAiResponse(data, text, menuNames);
     } catch (error) {
       console.error("AI server error:", error);
       return {
@@ -298,7 +607,7 @@ Rules: Only real menu items. On "add X" always add_to_cart. Suggest pairings. 2-
         suggestions: ["Full menu", "My cart"],
       };
     }
-  }, [buildPrompt]);
+  }, [buildPrompt, menuNames]);
 
   // ── SHARED ─────────────────────────────────────
   const shared = {
@@ -459,16 +768,12 @@ function VoiceMode({
     setPhase("thinking");
     const parsed = await askAIWithRetry(text, cartRef.current);
     const { message, actions = [] } = parsed;
-    let shouldOrder = false;
-    for (const a of actions) {
-      if (a.type === "add_to_cart" && a.item) {
-        const m = menuNames.find((n) => n.toLowerCase() === a.item.toLowerCase());
-        if (m) addItem(m);
-      } else if (a.type === "remove_from_cart" && a.item) removeItem(a.item);
-      else if (a.type === "show_menu") setIsMenuOpen(true);
-      else if (a.type === "open_cart") setIsCartOpen(true);
-      else if (a.type === "place_order") shouldOrder = true;
-    }
+    const { shouldOrder } = applyAiActions(actions, {
+      addItem,
+      removeItem,
+      setIsMenuOpen,
+      setIsCartOpen,
+    });
     setReply(message);
     speak(message, () => { if (shouldOrder) setTimeout(() => handleOrder(cartRef.current), 600); });
   };
@@ -801,17 +1106,13 @@ function ChatMode({
     setInput("");
     const parsed = await askAIWithRetry(text.trim(), cartRef.current);
     const { message, actions = [], suggestions = [] } = parsed;
-    let choices = [];
-    for (const a of actions) {
-      if (a.type === "add_to_cart" && a.item) {
-        const m = menuNames.find((n) => n.toLowerCase() === a.item.toLowerCase());
-        if (m) addItem(m);
-      } else if (a.type === "remove_from_cart" && a.item) removeItem(a.item);
-      else if (a.type === "show_menu") setIsMenuOpen(true);
-      else if (a.type === "place_order") handleOrder(cartRef.current);
-      else if (a.type === "open_cart") setIsCartOpen(true);
-      else if (a.type === "ask_choice" && Array.isArray(a.options)) choices = a.options;
-    }
+    const { shouldOrder, choices } = applyAiActions(actions, {
+      addItem,
+      removeItem,
+      setIsMenuOpen,
+      setIsCartOpen,
+    });
+    if (shouldOrder) handleOrder(cartRef.current);
     setMessages((p) => [...p, {
       from: "bot", text: message,
       suggestions: suggestions.length ? suggestions : null,

@@ -371,10 +371,19 @@ export default function AfterOrder() {
       }, 5000);
     };
 
+    const onPaymentComplete = ({ tableId: paidTableId, orderIds: paidOrderIds = [], paymentMethod }) => {
+      if (paidTableId !== tableId) return;
+      const nextOrderIds = Array.isArray(paidOrderIds) && paidOrderIds.length ? paidOrderIds : orderIds;
+      navigate(`/thank-you?cash=${paymentMethod === "cash" ? 1 : 0}&tableId=${encodeURIComponent(tableId)}&orderIds=${encodeURIComponent(nextOrderIds.join(","))}`, {
+        replace: true,
+      });
+    };
+
     socket.on("order:update", onOrderUpdate);
     socket.on("orderServed", onServed);
     socket.on("table:order-created", onTableOrderCreated);
     socket.on("waiter:accepted", onWaiterAccepted);
+    socket.on("table:payment-complete", onPaymentComplete);
 
     return () => {
       orderIds.forEach((orderId) => socket.emit("order:unsubscribe", { orderId }));
@@ -382,8 +391,9 @@ export default function AfterOrder() {
       socket.off("orderServed", onServed);
       socket.off("table:order-created", onTableOrderCreated);
       socket.off("waiter:accepted", onWaiterAccepted);
+      socket.off("table:payment-complete", onPaymentComplete);
     };
-  }, [orderIds, tableId]);
+  }, [navigate, orderIds, tableId]);
 
   useEffect(() => {
     const timers = [];
