@@ -243,7 +243,7 @@ export default function WaiterDashboard() {
   };
 
   // ── CASH RECEIVED (Table Status tab only) ────────────────────────────────
-  // billGroup includes _tableId so we can auto-clear the table after payment
+  // billGroup identifies the paid table so waiter can clean it next
   const markCashReceived = (billGroup) => {
     setConfirmCashOpen(billGroup);
   };
@@ -254,18 +254,12 @@ export default function WaiterDashboard() {
       // 1. Mark orders as paid — backend also updates WorkflowSession to redirect customer to /thank-you
       await API.post("/orders/markPaid/cash", { orderIds: confirmCashOpen.orderIds });
       setBillReadyTables((prev) => prev.filter((entry) => entry.tableNo !== confirmCashOpen.tableNo));
-
-      // 2. Auto-clear the table so it becomes available immediately
-      if (confirmCashOpen._tableId) {
-        try {
-          await API.patch(`/tables/clear/${confirmCashOpen._tableId}`);
-        } catch (clearErr) {
-          console.warn("Could not auto-clear table:", clearErr);
-        }
-      }
-
       fetchOrders();
       fetchAllTables();
+      setInfoPopup({
+        title: "Cash Recorded",
+        message: `Payment received for ${confirmCashOpen.tableNo}. Clean the table to make it available again.`,
+      });
     } catch (e) {
       console.error("Failed to mark cash received", e);
       setInfoPopup({
@@ -693,7 +687,7 @@ export default function WaiterDashboard() {
                   const needsClean = cleanRequests.some(c => c.tableId === tId && !c.done);
                   const billReady = billReadyTables.find((entry) => entry.tableNo === tId);
                   const canAcceptCash = Boolean(billReady?.orderIds?.length);
-                  // Attach the table's _id so confirmCashReceived can auto-clear it after payment
+                  // Keep the table reference for payment confirmation.
                   const billReadyWithTableId = billReady ? { ...billReady, _tableId: table._id } : null;
 
                   return (
@@ -787,7 +781,7 @@ export default function WaiterDashboard() {
                         </button>
                       )}
 
-                      {(isOccupied || isHeld || needsClean) && (
+                      {needsClean && (
                         <button
                           onClick={() => handleCleanClick(table)}
                           className="w-full mt-2 py-1.5 px-3 bg-slate-800/80 hover:bg-emerald-900/50 border border-slate-600/50 hover:border-emerald-500/60 text-slate-300 hover:text-emerald-300 text-[10px] font-bold uppercase tracking-wider rounded-lg flex items-center justify-center gap-1.5 transition-all active:scale-95"
