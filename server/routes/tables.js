@@ -11,6 +11,13 @@ function hasBlockingOrders(orders = []) {
   });
 }
 
+function getBlockingOrders(orders = []) {
+  return orders.filter((order) => {
+    const status = String(order.status || '').trim().toLowerCase();
+    return status !== 'paid' && status !== 'completed';
+  });
+}
+
 async function ensureTableCanBeCleared(table) {
   if (!table) {
     return { ok: false, status: 404, body: { msg: 'Table not found' } };
@@ -24,11 +31,16 @@ async function ensureTableCanBeCleared(table) {
   }
 
   const relatedOrders = await Order.find(query).lean();
+  const blockingOrders = getBlockingOrders(relatedOrders);
   if (hasBlockingOrders(relatedOrders)) {
     return {
       ok: false,
       status: 400,
-      body: { msg: 'This table still has active orders and cannot be cleared yet.' },
+      body: {
+        msg: `This table still has active orders and cannot be cleared yet. Pending statuses: ${blockingOrders
+          .map((order) => String(order.status || '').toLowerCase())
+          .join(', ')}.`,
+      },
     };
   }
 

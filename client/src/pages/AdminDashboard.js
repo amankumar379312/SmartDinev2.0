@@ -803,7 +803,7 @@ ${question}
                   <XAxis dataKey="label" tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={currency} />
                   <Tooltip content={<TooltipCard money />} />
-                  <Bar dataKey="value" fill={COLORS.blue} radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="value" fill={COLORS.blue} radius={[8, 8, 0, 0]} activeBar={{ fill: COLORS.blue, filter: "brightness(1.45) drop-shadow(0 0 8px #4a8cffaa)", opacity: 1 }} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -841,7 +841,7 @@ ${question}
                   <XAxis type="number" tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
                   <YAxis type="category" dataKey="name" width={120} tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
                   <Tooltip content={<TooltipCard />} />
-                  <Bar dataKey="value" radius={[0, 8, 8, 0]}>
+                  <Bar dataKey="value" radius={[0, 8, 8, 0]} activeBar={{ filter: "brightness(1.45) drop-shadow(0 0 8px #4a8cffaa)", opacity: 1 }}>
                     {(dashboard?.charts?.bestSellingItems || []).map((item) => (
                       <Cell key={item.name} fill={CATEGORY_COLORS[item.category] || COLORS.blue} />
                     ))}
@@ -1029,7 +1029,7 @@ ${question}
                   <XAxis dataKey="label" tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
                   <Tooltip content={<TooltipCard />} />
-                  <Bar dataKey="value" fill={COLORS.green} radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="value" fill={COLORS.green} radius={[6, 6, 0, 0]} activeBar={{ fill: COLORS.green, filter: "brightness(1.45) drop-shadow(0 0 8px #20c997aa)", opacity: 1 }} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -1143,12 +1143,12 @@ ${question}
                   <XAxis dataKey="label" tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={currency} />
                   <Tooltip content={<TooltipCard money />} />
-                  <Bar dataKey="value" fill={COLORS.blue} radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="value" fill={COLORS.blue} radius={[8, 8, 0, 0]} activeBar={{ fill: COLORS.blue, filter: "brightness(1.45) drop-shadow(0 0 8px #4a8cffaa)", opacity: 1 }} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
-          <Card><CardContent><div className="sd-card-header"><div><h3>Best Selling Items</h3><p>By order count</p></div></div><ResponsiveContainer width="100%" height={260}><BarChart data={dashboard?.charts?.bestSellingItems || []} layout="vertical"><CartesianGrid stroke={COLORS.grid} horizontal={false} /><XAxis type="number" tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis type="category" dataKey="name" width={120} tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><Tooltip content={<TooltipCard />} /><Bar dataKey="value" fill={COLORS.cyan} radius={[0, 8, 8, 0]} /></BarChart></ResponsiveContainer></CardContent></Card>
+          <Card><CardContent><div className="sd-card-header"><div><h3>Best Selling Items</h3><p>By order count</p></div></div><ResponsiveContainer width="100%" height={260}><BarChart data={dashboard?.charts?.bestSellingItems || []} layout="vertical"><CartesianGrid stroke={COLORS.grid} horizontal={false} /><XAxis type="number" tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis type="category" dataKey="name" width={120} tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><Tooltip content={<TooltipCard />} /><Bar dataKey="value" fill={COLORS.cyan} radius={[0, 8, 8, 0]} activeBar={{ fill: COLORS.cyan, filter: "brightness(1.45) drop-shadow(0 0 8px #21c1d9aa)", opacity: 1 }} /></BarChart></ResponsiveContainer></CardContent></Card>
         </div>
         <div className="sd-grid sd-grid--snapshots">
           {[
@@ -1167,16 +1167,16 @@ ${question}
           ))}
         </div>
         <div className="sd-grid sd-grid--equal">
-          <Card><CardContent><div className="sd-card-header"><div><h3>Most Used Tables</h3><p>By order count</p></div></div><ResponsiveContainer width="100%" height={240}><BarChart data={dashboard?.charts?.tableUsage || []}><CartesianGrid stroke={COLORS.grid} vertical={false} /><XAxis dataKey="name" tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><Tooltip content={<TooltipCard />} /><Bar dataKey="value" fill={COLORS.violet} radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></CardContent></Card>
-          <Card><CardContent><div className="sd-card-header"><div><h3>Orders by Hour</h3><p>Peak dining times</p></div></div><ResponsiveContainer width="100%" height={240}><BarChart data={dashboard?.charts?.hourlyOrders || []}><CartesianGrid stroke={COLORS.grid} vertical={false} /><XAxis dataKey="label" tick={{ fill: COLORS.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><Tooltip content={<TooltipCard />} /><Bar dataKey="value" fill={COLORS.green} radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></CardContent></Card>
+          <Card><CardContent><div className="sd-card-header"><div><h3>Most Used Tables</h3><p>By order count</p></div></div><ResponsiveContainer width="100%" height={240}><BarChart data={dashboard?.charts?.tableUsage || []}><CartesianGrid stroke={COLORS.grid} vertical={false} /><XAxis dataKey="name" tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><Tooltip content={<TooltipCard />} /><Bar dataKey="value" fill={COLORS.violet} radius={[6, 6, 0, 0]} activeBar={{ fill: COLORS.violet, filter: "brightness(1.45) drop-shadow(0 0 8px #8d5cf6aa)", opacity: 1 }} /></BarChart></ResponsiveContainer></CardContent></Card>
+          <Card><CardContent><div className="sd-card-header"><div><h3>Orders by Hour</h3><p>Peak dining times</p></div></div><ResponsiveContainer width="100%" height={240}><BarChart data={dashboard?.charts?.hourlyOrders || []}><CartesianGrid stroke={COLORS.grid} vertical={false} /><XAxis dataKey="label" tick={{ fill: COLORS.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><Tooltip content={<TooltipCard />} /><Bar dataKey="value" fill={COLORS.green} radius={[6, 6, 0, 0]} activeBar={{ fill: COLORS.green, filter: "brightness(1.45) drop-shadow(0 0 8px #20c997aa)", opacity: 1 }} /></BarChart></ResponsiveContainer></CardContent></Card>
         </div>
         <div className="sd-grid sd-grid--equal">
           <Card><CardContent><div className="sd-card-header"><div><h3>Customer Split</h3><p>First-time vs returning</p></div></div><div className="sd-split-panel"><ResponsiveContainer width="100%" height={180}><PieChart><Pie data={dashboard?.charts?.customerSplit || []} dataKey="value" innerRadius={50} outerRadius={72} strokeWidth={0}><Cell fill={COLORS.blue} /><Cell fill={COLORS.green} /></Pie></PieChart></ResponsiveContainer><div className="sd-split-panel__stats">{(dashboard?.charts?.customerSplit || []).map((item, index) => <div key={item.name}><strong>{item.value}%</strong><span>{item.name} customers</span>{index === 0 ? <i /> : null}</div>)}</div></div></CardContent></Card>
-          <Card><CardContent><div className="sd-card-header"><div><h3>Revenue by Day of Week</h3><p>Weekly pattern</p></div></div><ResponsiveContainer width="100%" height={240}><BarChart data={dashboard?.charts?.revenueByDayOfWeek || []}><CartesianGrid stroke={COLORS.grid} vertical={false} /><XAxis dataKey="label" tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={currency} /><Tooltip content={<TooltipCard money />} /><Bar dataKey="value" fill={COLORS.blue} radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></CardContent></Card>
+          <Card><CardContent><div className="sd-card-header"><div><h3>Revenue by Day of Week</h3><p>Weekly pattern</p></div></div><ResponsiveContainer width="100%" height={240}><BarChart data={dashboard?.charts?.revenueByDayOfWeek || []}><CartesianGrid stroke={COLORS.grid} vertical={false} /><XAxis dataKey="label" tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={currency} /><Tooltip content={<TooltipCard money />} /><Bar dataKey="value" fill={COLORS.blue} radius={[6, 6, 0, 0]} activeBar={{ fill: COLORS.blue, filter: "brightness(1.45) drop-shadow(0 0 8px #4a8cffaa)", opacity: 1 }} /></BarChart></ResponsiveContainer></CardContent></Card>
         </div>
         <div className="sd-grid sd-grid--equal">
           <Card><CardContent><div className="sd-card-header"><div><h3>Orders Over Time</h3><p>Volume trend for the selected range</p></div></div><ResponsiveContainer width="100%" height={240}><LineChart data={dashboard?.charts?.orderSeries || []}><CartesianGrid stroke={COLORS.grid} vertical={false} /><XAxis dataKey="label" tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><Tooltip content={<TooltipCard />} /><Line type="monotone" dataKey="value" stroke={COLORS.amber} strokeWidth={3} dot={false} /></LineChart></ResponsiveContainer></CardContent></Card>
-          <Card><CardContent><div className="sd-card-header"><div><h3>Customer Spend Buckets</h3><p>Distribution of customer value</p></div></div><ResponsiveContainer width="100%" height={240}><BarChart data={dashboard?.charts?.spendBuckets || []}><CartesianGrid stroke={COLORS.grid} vertical={false} /><XAxis dataKey="name" tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><Tooltip content={<TooltipCard />} /><Bar dataKey="value" fill={COLORS.violet} radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></CardContent></Card>
+          <Card><CardContent><div className="sd-card-header"><div><h3>Customer Spend Buckets</h3><p>Distribution of customer value</p></div></div><ResponsiveContainer width="100%" height={240}><BarChart data={dashboard?.charts?.spendBuckets || []}><CartesianGrid stroke={COLORS.grid} vertical={false} /><XAxis dataKey="name" tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: COLORS.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} /><Tooltip content={<TooltipCard />} /><Bar dataKey="value" fill={COLORS.violet} radius={[6, 6, 0, 0]} activeBar={{ fill: COLORS.violet, filter: "brightness(1.45) drop-shadow(0 0 8px #8d5cf6aa)", opacity: 1 }} /></BarChart></ResponsiveContainer></CardContent></Card>
         </div>
       </div>
     );

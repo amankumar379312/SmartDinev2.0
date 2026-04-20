@@ -19,6 +19,11 @@ function normalizeStatus(status) {
   return "waiting";
 }
 
+function canCancelOrder(status) {
+  const normalized = normalizeStatus(status);
+  return normalized === "waiting" || normalized === "accepted";
+}
+
 function getRemainingEtaSeconds(orderLike) {
   const etaSeconds = Number(orderLike?.etaSeconds);
   const etaAssignedAt = orderLike?.etaAssignedAt ? new Date(orderLike.etaAssignedAt) : null;
@@ -400,6 +405,67 @@ router.post("/:id/markPaid", auth, async (req, res) => {
   }
 });
 
+router.delete("/:id", auth, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    if (!canCancelOrder(order.status)) {
+      return res.status(400).json({
+        message: "This order can no longer be cancelled because kitchen preparation has already started.",
+      });
+    }
+
+    await Order.deleteOne({ _id: order._id });
+
+    if (order.tableNo) {
+      const workflow = await findActiveWorkflowForTable(order.tableNo);
+      if (workflow) {
+        const nextActiveOrderIds = (workflow.activeOrderIds || []).filter(
+          (orderId) => String(orderId) !== String(order._id)
+        );
+        const nextRouteState = workflow.routeState && typeof workflow.routeState === "object"
+          ? {
+              ...workflow.routeState,
+              existingOrderIds: Array.isArray(workflow.routeState.existingOrderIds)
+                ? workflow.routeState.existingOrderIds.filter((orderId) => String(orderId) !== String(order._id))
+                : nextActiveOrderIds,
+            }
+          : workflow.routeState;
+
+        await WorkflowSession.findByIdAndUpdate(workflow._id, {
+          activeOrderIds: nextActiveOrderIds,
+          routeState: nextRouteState,
+        });
+      }
+    }
+
+    const io = req.app.get("io");
+    if (io) {
+      io.to(`order_${order._id}`).emit("order:cancelled", {
+        orderId: order._id.toString(),
+        tableId: order.tableNo || null,
+      });
+
+      if (order.tableNo) {
+        io.to(`table_${order.tableNo}`).emit("table:order-cancelled", {
+          tableId: order.tableNo,
+          orderId: order._id.toString(),
+        });
+      }
+    }
+
+    return res.json({
+      message: "Order cancelled successfully",
+      orderId: order._id.toString(),
+      tableId: order.tableNo || null,
+    });
+  } catch (err) {
+    console.error("Error cancelling order:", err);
+    return res.status(500).json({ message: "Failed to cancel order" });
+  }
+});
+
 router.post("/markPaid/bulk", auth, async (req, res) => {
   try {
     const orders = await getOrdersFromRequest(req.body);
@@ -425,6 +491,23 @@ router.post("/markPaid/cash", auth, requireRole("waiter", "admin"), async (req, 
     const orders = await getOrdersFromRequest(req.body);
     if (!orders.length) {
       return res.status(404).json({ message: "Order not found" });
+    }
+
+    const tableNo = orders[0]?.tableNo || null;
+    const relatedActiveOrders = tableNo
+      ? await Order.find({ tableNo }).sort({ createdAt: 1 })
+      : orders;
+    const unpaidOrders = relatedActiveOrders.filter((order) => normalizeStatus(order.status) !== "paid");
+    const blockingOrders = unpaidOrders.filter((order) => normalizeStatus(order.status) !== "served");
+
+    if (blockingOrders.length) {
+      return res.status(400).json({
+        message: "Cash can only be accepted after all orders for this table have been served.",
+        blockingOrders: blockingOrders.map((order) => ({
+          orderId: order._id.toString(),
+          status: normalizeStatus(order.status),
+        })),
+      });
     }
 
     const unpaidServedOrders = orders.filter((order) => normalizeStatus(order.status) === "served");

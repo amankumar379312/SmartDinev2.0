@@ -65,6 +65,11 @@ function formatShortOrderId(orderId) {
   return `#${raw.slice(-6).toUpperCase()}`;
 }
 
+function canCancelOrder(status) {
+  const normalized = normalizeStatus(status);
+  return normalized === "waiting" || normalized === "accepted";
+}
+
 function OrderItemsModal({ order, onClose }) {
   if (!order) return null;
 
@@ -115,9 +120,11 @@ function OrderItemsModal({ order, onClose }) {
   );
 }
 
-function OrderCard({ order, onViewOrder }) {
+function OrderCard({ order, onViewOrder, onCancelOrder, cancellingOrderId }) {
   const stepIndex = Math.max(STATUSES.indexOf(order.status), 0);
   const isServed = order.status === "served";
+  const isCancellable = canCancelOrder(order.status);
+  const isCancelling = cancellingOrderId === order._id;
 
   return (
     <article className={`relative w-full max-w-2xl overflow-hidden rounded-3xl border transition-all duration-500 shadow-2xl backdrop-blur-xl flex flex-col ${isServed ? "border-emerald-500/40 bg-slate-900/80 shadow-emerald-500/10" : "border-slate-700/60 bg-slate-900/60 hover:border-orange-500/40 hover:shadow-orange-500/10"}`}>
@@ -134,12 +141,23 @@ function OrderCard({ order, onViewOrder }) {
           <p className="text-xl font-black tracking-tight text-white">{formatShortOrderId(order._id)}</p>
         </div>
         
-        <button
-          onClick={() => onViewOrder(order)}
-          className={`shrink-0 rounded-xl border px-4 py-2.5 text-sm font-bold transition-all hover:-translate-y-0.5 active:scale-95 ${isServed ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-100" : "border-orange-500/40 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20 hover:text-orange-100"}`}
-        >
-          View Items
-        </button>
+        <div className="flex shrink-0 items-center gap-3">
+          {isCancellable && (
+            <button
+              onClick={() => onCancelOrder(order)}
+              disabled={isCancelling}
+              className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2.5 text-sm font-bold text-red-300 transition-all hover:-translate-y-0.5 hover:bg-red-500/20 hover:text-red-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isCancelling ? "Cancelling..." : "Cancel Order"}
+            </button>
+          )}
+          <button
+            onClick={() => onViewOrder(order)}
+            className={`shrink-0 rounded-xl border px-4 py-2.5 text-sm font-bold transition-all hover:-translate-y-0.5 active:scale-95 ${isServed ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-100" : "border-orange-500/40 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20 hover:text-orange-100"}`}
+          >
+            View Items
+          </button>
+        </div>
       </div>
 
       {/* ETA Section */}
@@ -232,6 +250,8 @@ export default function AfterOrder() {
   const [countdown, setCountdown] = useState(0);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [cancelOrderId, setCancelOrderId] = useState(null);
+  const [actionError, setActionError] = useState("");
 
   const acceptedRef = useRef(false);
   const countdownIntervalRef = useRef(null);
@@ -308,6 +328,12 @@ export default function AfterOrder() {
         return acc;
       }, {});
 
+      const nextOrderIds = responses.filter(Boolean).map(([orderId]) => orderId);
+      setOrderIds((prev) => (
+        prev.length === nextOrderIds.length && prev.every((orderId, index) => orderId === nextOrderIds[index])
+          ? prev
+          : nextOrderIds
+      ));
       setOrdersById(nextOrders);
       if (!cancelled) setLoading(false);
     }
@@ -379,11 +405,23 @@ export default function AfterOrder() {
       });
     };
 
+    const onOrderCancelled = ({ orderId, tableId: eventTableId }) => {
+      if (!orderId || (eventTableId && eventTableId !== tableId)) return;
+      setOrderIds((prev) => prev.filter((existingId) => existingId !== orderId));
+      setOrdersById((prev) => {
+        const next = { ...prev };
+        delete next[orderId];
+        return next;
+      });
+      setSelectedOrder((prev) => (prev?._id === orderId ? null : prev));
+    };
+
     socket.on("order:update", onOrderUpdate);
     socket.on("orderServed", onServed);
     socket.on("table:order-created", onTableOrderCreated);
     socket.on("waiter:accepted", onWaiterAccepted);
     socket.on("table:payment-complete", onPaymentComplete);
+    socket.on("order:cancelled", onOrderCancelled);
 
     return () => {
       orderIds.forEach((orderId) => socket.emit("order:unsubscribe", { orderId }));
@@ -392,6 +430,7 @@ export default function AfterOrder() {
       socket.off("table:order-created", onTableOrderCreated);
       socket.off("waiter:accepted", onWaiterAccepted);
       socket.off("table:payment-complete", onPaymentComplete);
+      socket.off("order:cancelled", onOrderCancelled);
     };
   }, [navigate, orderIds, tableId]);
 
@@ -469,6 +508,28 @@ export default function AfterOrder() {
 
   const handleViewBill = () => {
     navigate("/bill", { state: { orderIds } });
+  };
+
+  const handleCancelOrder = async (order) => {
+    if (!order?._id) return;
+
+    setActionError("");
+    setCancelOrderId(order._id);
+
+    try {
+      await API.delete(`/orders/${order._id}`);
+      setOrderIds((prev) => prev.filter((orderId) => orderId !== order._id));
+      setOrdersById((prev) => {
+        const next = { ...prev };
+        delete next[order._id];
+        return next;
+      });
+      setSelectedOrder((prev) => (prev?._id === order._id ? null : prev));
+    } catch (error) {
+      setActionError(error?.response?.data?.message || "This order cannot be cancelled now.");
+    } finally {
+      setCancelOrderId(null);
+    }
   };
 
   return (
@@ -620,6 +681,11 @@ export default function AfterOrder() {
       </nav>
 
       <main className="relative z-10 mx-auto max-w-[1800px] px-4 pb-12 pt-4">
+        {actionError && (
+          <div className="mx-auto mb-6 max-w-2xl rounded-2xl border border-red-500/40 bg-red-500/10 px-5 py-4 text-sm font-medium text-red-200 shadow-lg shadow-red-500/10">
+            {actionError}
+          </div>
+        )}
         {loading ? (
           <div className="mx-auto mt-20 max-w-xl rounded-3xl border border-slate-700/50 bg-slate-800/60 p-10 text-center backdrop-blur-xl shadow-2xl">
              <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-6 shadow-[0_0_15px_rgba(249,115,22,0.5)]"></div>
@@ -643,7 +709,12 @@ export default function AfterOrder() {
             <div className={`gap-8 ${sortedOrders.length === 1 ? "flex justify-center w-full max-w-3xl mx-auto" : sortedOrders.length === 2 ? "grid justify-center grid-cols-1 xl:grid-cols-2 max-w-6xl mx-auto" : "grid justify-center xl:grid-cols-2 2xl:grid-cols-3"}`}>
               {sortedOrders.map((order) => (
                 <div key={order._id} className={sortedOrders.length === 1 ? "w-full flex justify-center" : "flex justify-center"}>
-                  <OrderCard order={order} onViewOrder={setSelectedOrder} />
+                  <OrderCard
+                    order={order}
+                    onViewOrder={setSelectedOrder}
+                    onCancelOrder={handleCancelOrder}
+                    cancellingOrderId={cancelOrderId}
+                  />
                 </div>
               ))}
             </div>

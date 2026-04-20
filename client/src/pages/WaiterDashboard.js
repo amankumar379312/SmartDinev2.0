@@ -64,7 +64,7 @@ export default function WaiterDashboard() {
         .filter(o => normalize(o.status) === "ready")
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       const servedUnpaid = list
-        .filter(o => normalize(o.status) === "served")
+        .filter(o => normalize(o.status) !== "paid")
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       const groupedBillReady = Object.values(servedUnpaid.reduce((acc, order) => {
         const tableKey = order.tableNo || "Walk-in";
@@ -77,18 +77,23 @@ export default function WaiterDashboard() {
             itemCount: 0,
             ordersCount: 0,
             latestCreatedAt: order.createdAt || null,
+            allServed: true,
           };
         }
-        acc[tableKey].orderIds.push(order._id);
-        acc[tableKey].totalCost += Number(order.totalCost) || 0;
-        acc[tableKey].itemCount += Array.isArray(order.items) ? order.items.length : 0;
         acc[tableKey].ordersCount += 1;
+        if (normalize(order.status) === "served") {
+          acc[tableKey].orderIds.push(order._id);
+          acc[tableKey].totalCost += Number(order.totalCost) || 0;
+          acc[tableKey].itemCount += Array.isArray(order.items) ? order.items.length : 0;
+        } else {
+          acc[tableKey].allServed = false;
+        }
         if (!acc[tableKey].userEmail && order.userEmail) acc[tableKey].userEmail = order.userEmail;
         if (new Date(order.createdAt || 0) > new Date(acc[tableKey].latestCreatedAt || 0)) {
           acc[tableKey].latestCreatedAt = order.createdAt || null;
         }
         return acc;
-      }, {}));
+      }, {})).filter((entry) => entry.allServed && entry.orderIds.length > 0);
       setReadyOrders(ready);
       setBillReadyTables(groupedBillReady);
     } catch (e) {
@@ -214,7 +219,7 @@ export default function WaiterDashboard() {
       console.error("Failed to clear table:", e);
       setInfoPopup({
         title: "Table Cannot Be Cleared",
-        message: e?.response?.data?.msg || "Could not clear table.",
+        message: e?.response?.data?.msg || "Could not clear table. Make sure all table orders are served or paid first.",
       });
     } finally {
       setConfirmCleanOpen(null);
@@ -265,7 +270,7 @@ export default function WaiterDashboard() {
       console.error("Failed to mark cash received", e);
       setInfoPopup({
         title: "Cash Payment Failed",
-        message: e?.response?.data?.message || "Could not record cash payment.",
+        message: e?.response?.data?.message || "Could not record cash payment. All orders for this table must be served first.",
       });
     } finally {
       setConfirmCashOpen(null);
