@@ -4,17 +4,21 @@ const Table = require('../models/Table');
 const Order = require('../models/Order');
 const auth = require('../middleware/auth');
 
+// Non-blocking statuses: orders in these states do NOT prevent table clearing.
+// 'served' is non-blocking because cash has already been collected by the waiter.
+const NON_BLOCKING_STATUSES = new Set(['paid', 'completed', 'served']);
+
 function hasBlockingOrders(orders = []) {
   return orders.some((order) => {
     const status = String(order.status || '').trim().toLowerCase();
-    return status !== 'paid' && status !== 'completed';
+    return !NON_BLOCKING_STATUSES.has(status);
   });
 }
 
 function getBlockingOrders(orders = []) {
   return orders.filter((order) => {
     const status = String(order.status || '').trim().toLowerCase();
-    return status !== 'paid' && status !== 'completed';
+    return !NON_BLOCKING_STATUSES.has(status);
   });
 }
 
@@ -27,7 +31,13 @@ async function ensureTableCanBeCleared(table) {
   const query = { tableNo: table.tableId };
 
   if (occupiedAt && !Number.isNaN(occupiedAt.getTime())) {
+    // Scope to orders placed after the table was last occupied
     query.createdAt = { $gte: occupiedAt };
+  } else {
+    // No occupiedAt recorded — fall back to orders from the last 24 hours only
+    // to avoid pulling in stale historical orders from previous sessions
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    query.createdAt = { $gte: since };
   }
 
   const relatedOrders = await Order.find(query).lean();

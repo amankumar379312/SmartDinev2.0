@@ -17,14 +17,22 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 router.use(auth, requireRole("admin"));
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const GEMINI_MODEL_CHAIN = [
-  GEMINI_MODEL,
+  process.env.GEMINI_MODEL || "gemini-2.5-flash",
+  "gemini-3.1-flash-lite-preview",
   "gemini-2.0-flash",
   "gemini-1.5-flash",
 ].filter((model, index, list) => model && list.indexOf(model) === index);
-const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
-const geminiClient = geminiApiKey ? new GoogleGenerativeAI(geminiApiKey) : null;
+const GEMINI_API_KEYS = [
+  process.env.GEMINI_API_KEY_1,
+  process.env.GEMINI_API_KEY_2,
+  process.env.GEMINI_API_KEY_3,
+  process.env.GEMINI_API_KEY_4,
+  process.env.GEMINI_API_KEY_5,
+  process.env.GEMINI_API_KEY,
+  process.env.GOOGLE_API_KEY,
+].filter((key, index, list) => key && list.indexOf(key) === index);
+const geminiClients = GEMINI_API_KEYS.map((key) => new GoogleGenerativeAI(key));
 
 function number(value, fallback = 0) {
   const parsed = Number(value);
@@ -304,8 +312,61 @@ function buildSummaryContext(summary) {
   };
 }
 
+function summarizeError(error) {
+  const status = Number(error?.status || 0);
+  const message = String(error?.message || "").trim();
+  return {
+    status: status || null,
+    message: message || "Unknown error",
+  };
+}
+
+function isRetryableGeminiError(error) {
+  const status = Number(error?.status || 0);
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    status === 404 ||
+    status === 429 ||
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    message.includes("404") ||
+    message.includes("429") ||
+    message.includes("500") ||
+    message.includes("502") ||
+    message.includes("503") ||
+    message.includes("504") ||
+    message.includes("quota") ||
+    message.includes("rate limit") ||
+    message.includes("service unavailable") ||
+    message.includes("high demand") ||
+    message.includes("temporarily unavailable") ||
+    message.includes("timed out") ||
+    message.includes("aborted")
+  );
+}
+
+function logAiAttempt(scope, details) {
+  const parts = [
+    `[AI:${scope}]`,
+    `key=${details.keyIndex}`,
+    `model=${details.modelName}`,
+    `stage=${details.stage}`,
+  ];
+
+  if (details.durationMs != null) parts.push(`durationMs=${details.durationMs}`);
+  if (details.rawLength != null) parts.push(`rawLength=${details.rawLength}`);
+  if (details.retryable != null) parts.push(`retryable=${details.retryable}`);
+  if (details.reason) parts.push(`reason=${details.reason}`);
+  if (details.status != null) parts.push(`status=${details.status}`);
+
+  console.log(parts.join(" "));
+}
+
 async function generateGeminiText(prompt) {
-  if (!geminiClient) return null;
+  if (!geminiClients.length) return null;
   return generateGeminiJsonText(prompt);
 }
 
@@ -330,41 +391,83 @@ function extractJsonText(raw) {
 }
 
 async function generateGeminiJsonText(prompt) {
-  if (!geminiClient) return null;
+  if (!geminiClients.length) return null;
 
-  for (let attempt = 0; attempt < 7; attempt += 1) {
-    const modelName = GEMINI_MODEL_CHAIN[Math.min(attempt >> 1, GEMINI_MODEL_CHAIN.length - 1)];
+  const maxAttempts = Math.max(4, GEMINI_MODEL_CHAIN.length * geminiClients.length);
+  let attempts = 0;
 
-    try {
-      const model = geminiClient.getGenerativeModel({
-        model: modelName,
-        generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: 800,
-          responseMimeType: "application/json",
-        },
-      });
-
-      const result = await model.generateContent(prompt);
-      const raw = result?.response?.text?.() || "";
-      const cleaned = extractJsonText(raw);
-      if (cleaned) return cleaned;
-    } catch (error) {
-      const message = String(error?.message || "");
-      const is429 = message.includes("429");
-      const is404 = message.includes("404");
-
-      if (is404 && attempt < GEMINI_MODEL_CHAIN.length - 1) {
-        continue;
+  for (const modelName of GEMINI_MODEL_CHAIN) {
+    for (let clientIndex = 0; clientIndex < geminiClients.length; clientIndex += 1) {
+      const client = geminiClients[clientIndex];
+      if (attempts >= maxAttempts) {
+        console.log(`[AI:admin] final=attempt_limit_reached maxAttempts=${maxAttempts}`);
+        return null;
       }
 
-      if (is429) {
-        const wait = Math.min(800 * 2 ** Math.floor(attempt / 2), 10000);
+      attempts += 1;
+      const startedAt = Date.now();
+
+      try {
+        logAiAttempt("admin", {
+          keyIndex: clientIndex + 1,
+          modelName,
+          stage: "request_started",
+          reason: `attempt=${attempts}/${maxAttempts}`,
+        });
+
+        const model = client.getGenerativeModel({
+          model: modelName,
+          generationConfig: {
+            temperature: 0.4,
+            maxOutputTokens: 800,
+            responseMimeType: "application/json",
+          },
+        });
+
+        const result = await model.generateContent(prompt);
+        const raw = result?.response?.text?.() || "";
+        const cleaned = extractJsonText(raw);
+
+        logAiAttempt("admin", {
+          keyIndex: clientIndex + 1,
+          modelName,
+          stage: "response_received",
+          durationMs: Date.now() - startedAt,
+          rawLength: raw.length,
+        });
+
+        if (cleaned) {
+          return cleaned;
+        }
+
+        logAiAttempt("admin", {
+          keyIndex: clientIndex + 1,
+          modelName,
+          stage: "parse_failed",
+          durationMs: Date.now() - startedAt,
+          reason: "empty_json_text",
+        });
+      } catch (error) {
+        const retryable = isRetryableGeminiError(error);
+        const summary = summarizeError(error);
+
+        logAiAttempt("admin", {
+          keyIndex: clientIndex + 1,
+          modelName,
+          stage: "request_failed",
+          durationMs: Date.now() - startedAt,
+          retryable,
+          status: summary.status,
+          reason: summary.message,
+        });
+
+        if (!retryable) {
+          throw error;
+        }
+
+        const wait = Math.min(800 * 2 ** Math.floor((attempts - 1) / 2), 10000);
         await sleep(wait);
-        continue;
       }
-
-      throw error;
     }
   }
 

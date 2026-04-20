@@ -1,5 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import API from "../api";
 import AdminSidebar from "../components/AdminSidebar";
 import LogoutButton from "../components/LogoutButton";
@@ -27,7 +26,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Calendar, Download, IndianRupee, Mail, MessageCircle, Moon, Phone, Search, Send, Sun, UserPlus, X, ClipboardList, TrendingUp, Users } from "lucide-react";
+import { Calendar, Download, IndianRupee, Mail, MessageCircle, Phone, Search, Send, UserPlus, X, ClipboardList, TrendingUp, Users } from "lucide-react";
 
 const COLORS = {
   blue: "#4a8cff",
@@ -55,8 +54,6 @@ const CATEGORY_COLORS = {
   Beverages: COLORS.cyan,
   Desserts: COLORS.violet,
 };
-
-const GEMINI_MODEL_CHAIN = ["models/gemini-3.1-flash-lite-preview", "gemini-2.5-flash", "gemini-2.0-flash"];
 
 function currency(value) {
   return `₹${Number(value || 0).toLocaleString("en-IN")}`;
@@ -120,76 +117,7 @@ function MetricRing({ value, label, color }) {
   );
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function extractJsonText(raw) {
-  const text = String(raw || "").trim();
-  if (!text) return "";
-
-  const fencedMatch = text.match(/```json\s*([\s\S]*?)```/i) || text.match(/```\s*([\s\S]*?)```/i);
-  if (fencedMatch?.[1]) return fencedMatch[1].trim();
-
-  const firstBrace = text.indexOf("{");
-  const lastBrace = text.lastIndexOf("}");
-  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    return text.slice(firstBrace, lastBrace + 1).trim();
-  }
-
-  return text;
-}
-
-function buildAdminInsightContext(dashboard) {
-  const kpis = dashboard?.overview?.kpis || {};
-  const charts = dashboard?.charts || {};
-  const requests = dashboard?.requests || {};
-  const staff = dashboard?.staff || {};
-
-  return {
-    range: dashboard?.selectedRange?.label || "Selected range",
-    revenue: Number(kpis.totalRevenue?.value || 0),
-    revenueDelta: Number(kpis.totalRevenue?.deltaVsPreviousPeriod || 0),
-    orders: Number(kpis.totalOrders?.value || 0),
-    ordersDelta: Number(kpis.totalOrders?.deltaVsPreviousPeriod || 0),
-    avgOrderValue: Number(kpis.avgOrderValue?.value || 0),
-    avgOrderValueDelta: Number(kpis.avgOrderValue?.deltaVsPreviousPeriod || 0),
-    uniqueCustomers: Number(kpis.uniqueCustomers?.value || 0),
-    uniqueCustomersDelta: Number(kpis.uniqueCustomers?.deltaVsPreviousPeriod || 0),
-    repeatRate: Number(dashboard?.overview?.extra?.repeatRate || 0),
-    completionRate: Number(dashboard?.overview?.extra?.completionRate || 0),
-    occupancyRate: Number(dashboard?.overview?.extra?.tableOccupancyRate || 0),
-    topDay: dashboard?.overview?.extra?.topDay || null,
-    topHour: dashboard?.overview?.extra?.topHour || null,
-    revenueSeries: (charts.revenueSeries || []).slice(-8),
-    orderSeries: (charts.orderSeries || []).slice(-8),
-    hourlyOrders: charts.hourlyOrders || [],
-    bestSellingItems: (charts.bestSellingItems || []).slice(0, 5),
-    categoryPerformance: charts.categoryPerformance || [],
-    customerSplit: charts.customerSplit || [],
-    statusDistribution: charts.statusDistribution || [],
-    spendBuckets: charts.spendBuckets || [],
-    topCustomers: (charts.topCustomers || []).slice(0, 5),
-    tableUsage: (charts.tableUsage || []).slice(0, 8),
-    revenueByDayOfWeek: charts.revenueByDayOfWeek || [],
-    topUpsellOpportunities: (charts.topUpsellOpportunities || []).slice(0, 5),
-    pendingRequests: Number(requests.pendingCount || 0),
-    requestPreview: (requests.items || []).slice(0, 5).map((item) => ({
-      type: item.type,
-      category: item.category,
-      status: item.status,
-      tableNo: item.tableNo,
-    })),
-    staffSummary: {
-      waiters: Array.isArray(staff.waiters) ? staff.waiters.length : 0,
-      cooks: Array.isArray(staff.cooks) ? staff.cooks.length : 0,
-    },
-  };
-}
-
 export default function AdminDashboard() {
-  const genAIRef = useRef(null);
-  const modelIdxRef = useRef(0);
   const [activePanel, setActivePanel] = useState("overview");
   const [overviewTab, setOverviewTab] = useState("overview");
   const [dashboard, setDashboard] = useState(null);
@@ -237,15 +165,7 @@ export default function AdminDashboard() {
   const [orderSearch, setOrderSearch] = useState("");
   const [menuItems, setMenuItems] = useState([]);
   const [menuTab, setMenuTab] = useState("starters");
-  const [theme, setTheme] = useState(() => localStorage.getItem("sd-theme") || "dark");
-  const toggleTheme = () => setTheme(prev => {
-    const next = prev === "dark" ? "light" : "dark";
-    localStorage.setItem("sd-theme", next);
-    return next;
-  });
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const geminiEnabled = Boolean(process.env.REACT_APP_GEMINI_API_KEY);
 
   const buildRangeParams = useCallback((override = {}) => {
     const nextTimeRange = override.timeRange || timeRange;
@@ -260,53 +180,6 @@ export default function AdminDashboard() {
     return { timeRange: nextTimeRange };
   }, [appliedRange, timeRange]);
 
-  const generateAdminGeminiJson = useCallback(async (prompt) => {
-    if (!geminiEnabled) return null;
-
-    if (!genAIRef.current) {
-      genAIRef.current = new GoogleGenerativeAI(process.env.REACT_APP_GEMINI_API_KEY);
-    }
-
-    for (let attempt = 0; attempt < 7; attempt += 1) {
-      try {
-        const modelName = GEMINI_MODEL_CHAIN[Math.min(modelIdxRef.current, GEMINI_MODEL_CHAIN.length - 1)];
-        const model = genAIRef.current.getGenerativeModel({
-          model: modelName,
-          generationConfig: { temperature: 0.4, maxOutputTokens: 900 },
-        });
-        const result = await model.generateContent(prompt);
-        const raw = result?.response?.text?.()?.trim() || "";
-        const cleaned = extractJsonText(raw);
-        if (cleaned) return JSON.parse(cleaned);
-      } catch (err) {
-        const message = String(err?.message || "");
-        const is429 = message.includes("429");
-        const is404 = message.includes("404");
-
-        if (is404) {
-          const next = modelIdxRef.current + 1;
-          if (next < GEMINI_MODEL_CHAIN.length) {
-            modelIdxRef.current = next;
-            continue;
-          }
-        }
-
-        if (is429) {
-          const wait = Math.min(800 * 2 ** Math.floor(attempt / 2), 10000);
-          await sleep(wait);
-          if (attempt % 2 === 1 && modelIdxRef.current < GEMINI_MODEL_CHAIN.length - 1) {
-            modelIdxRef.current += 1;
-          }
-          continue;
-        }
-
-        throw err;
-      }
-    }
-
-    return null;
-  }, [geminiEnabled]);
-
   const fetchDashboard = useCallback(async () => {
     // First load — show full spinner. Subsequent range changes — keep UI, just refresh data.
     const isFirstLoad = !dashboard;
@@ -319,35 +192,6 @@ export default function AdminDashboard() {
     try {
       const { data } = await API.get("/admin-dashboard", { params: buildRangeParams() });
       let resolvedInsights = data?.insights || null;
-
-      if (geminiEnabled) {
-        try {
-          const geminiInsights = await generateAdminGeminiJson(`
-You are Nova, SmartDine's AI business analyst for the admin dashboard.
-Analyze the selected dashboard range and respond ONLY with valid JSON. No markdown. No backticks.
-
-Schema:
-{
-  "summary": "string",
-  "chips": ["string"],
-  "actions": ["string"]
-}
-
-Rules:
-- Summary must be under 80 words.
-- Focus on the most important business trend or risk.
-- Chips must be short dashboard-ready callouts.
-- Actions must be practical and specific.
-- Use only the provided dashboard context.
-
-Dashboard context:
-${JSON.stringify(buildAdminInsightContext(data), null, 2)}
-`);
-          if (geminiInsights) resolvedInsights = geminiInsights;
-        } catch (geminiError) {
-          console.error("Gemini insight generation failed, using dashboard fallback:", geminiError);
-        }
-      }
 
       setDashboard(data);
       setInsights(resolvedInsights);
@@ -364,7 +208,7 @@ ${JSON.stringify(buildAdminInsightContext(data), null, 2)}
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, [buildRangeParams, dashboard, geminiEnabled, generateAdminGeminiJson]);
+  }, [buildRangeParams, dashboard]);
 
   const fetchMenu = async () => {
     try {
@@ -451,37 +295,8 @@ ${JSON.stringify(buildAdminInsightContext(data), null, 2)}
   const refreshInsights = async () => {
     try {
       setInsightLoading(true);
-      const context = buildAdminInsightContext(dashboard);
-      let data = null;
-
-      if (dashboard && geminiEnabled) {
-        data = await generateAdminGeminiJson(`
-You are Nova, SmartDine's AI business analyst for the admin dashboard.
-Analyze the selected dashboard range and respond ONLY with valid JSON. No markdown. No backticks.
-
-Schema:
-{
-  "summary": "string",
-  "chips": ["string"],
-  "actions": ["string"]
-}
-
-Rules:
-- Summary must be under 80 words.
-- Focus on what matters most for business performance.
-- Chips must be short dashboard-ready callouts.
-- Actions must be practical next steps for a restaurant manager.
-- Use only the provided dashboard context.
-
-Dashboard context:
-${JSON.stringify(context, null, 2)}
-`);
-      }
-
-      if (!data) {
-        const response = await API.get("/admin-dashboard/insights", { params: buildRangeParams() });
-        data = response.data;
-      }
+      const response = await API.get("/admin-dashboard/insights", { params: buildRangeParams() });
+      const data = response.data;
 
       setInsights(data);
       if (data?.actions?.length) {
@@ -505,47 +320,12 @@ ${JSON.stringify(context, null, 2)}
 
     try {
       setChatLoading(true);
-      const context = buildAdminInsightContext(dashboard);
-      let data = null;
-
-      if (dashboard && geminiEnabled) {
-        data = await generateAdminGeminiJson(`
-You are Nova, SmartDine's AI business analyst for the admin dashboard.
-Answer questions about revenue, operations, customer behavior, table usage, staff load, and product performance.
-Use only the provided dashboard data and recent chat history.
-Respond ONLY with valid JSON. No markdown. No backticks.
-
-Schema:
-{
-  "answer": "string",
-  "suggestedPrompts": ["string"]
-}
-
-Rules:
-- Keep the answer concise but specific.
-- Mention exact metrics when they support the answer.
-- If the dashboard data does not support the answer, say that directly.
-- Suggested prompts should be strong follow-up business questions.
-
-Dashboard context:
-${JSON.stringify(context, null, 2)}
-
-Recent chat history:
-${JSON.stringify(nextHistory.slice(-6), null, 2)}
-
-User question:
-${question}
-`);
-      }
-
-      if (!data) {
-        const response = await API.post("/admin-dashboard/insights/chat", {
-          question,
-          ...buildRangeParams(),
-          history: nextHistory,
-        });
-        data = response.data;
-      }
+      const response = await API.post("/admin-dashboard/insights/chat", {
+        question,
+        ...buildRangeParams(),
+        history: nextHistory,
+      });
+      const data = response.data;
 
       setChatMessages((prev) => [...prev, { role: "assistant", content: data?.answer || "No answer available." }]);
       if (Array.isArray(data?.suggestedPrompts) && data.suggestedPrompts.length) {
@@ -1358,7 +1138,7 @@ ${question}
   };
 
   return (
-    <div className={`sd-admin${theme === "light" ? " sd-light" : ""}`}>
+    <div className="sd-admin">
       <AdminSidebar active={activePanel} setActive={setActivePanel} badges={{ requests: requestCount }} />
       <main className="sd-main-shell">
         <header className="sd-topbar">
@@ -1367,9 +1147,6 @@ ${question}
             <p>{topMeta.sub}</p>
           </div>
           <div className="sd-topbar__actions">
-            <button className="sd-theme-toggle" onClick={toggleTheme} title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}>
-              {theme === "dark" ? <><Sun size={13} /> Light</> : <><Moon size={13} /> Dark</>}
-            </button>
             <button
               onClick={exportDashboardImage}
               style={{
