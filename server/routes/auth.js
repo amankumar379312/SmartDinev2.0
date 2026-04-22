@@ -3,7 +3,6 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-// Helper to build JWT payload
 function buildUserPayload(user) {
   return {
     id: user._id,
@@ -14,14 +13,12 @@ function buildUserPayload(user) {
   };
 }
 
-// ------------------------
-// REGISTER
-// ------------------------
+
 router.post('/register', async (req, res) => {
   const { name, phone, email, password, role } = req.body;
 
   try {
-    // check if phone or email exists
+
     const existing = await User.findOne({
       $or: [{ phone }, { email }]
     });
@@ -30,12 +27,12 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ msg: 'Phone or email already exists' });
     }
 
-    // NO HASHING — store plain password (your old logic)
+
     const user = await User.create({
       name,
       phone,
       email,
-      password,     // <-- store as plain
+      password,
       role
     });
 
@@ -51,9 +48,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// ------------------------
-// LOGIN (old logic)
-// ------------------------
+
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
@@ -69,7 +64,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ msg: 'Invalid credentials' });
     }
 
-    // KEEPING YOUR OLD LOGIC (plain password compare)
+
     const ok = (password === user.password);
     if (!ok) {
       return res.status(400).json({ msg: 'Invalid credentials' });
@@ -89,9 +84,6 @@ router.post('/login', async (req, res) => {
 });
 
 
-// ------------------------
-// GET ALL USERS
-// ------------------------
 router.get('/all-users', async (req, res) => {
   try {
     const users = await User.find().sort({ createdAt: -1 }).lean();

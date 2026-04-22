@@ -3,8 +3,6 @@ import API from "../api";
 import LogoutButton from "../components/LogoutButton";
 import { UtensilsCrossed } from "lucide-react";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 function pad(n) { return String(n).padStart(2, "0"); }
 
 function elapsed(createdAt) {
@@ -20,36 +18,36 @@ function CountUp({ createdAt }) {
   return <span style={{ color: isLong ? C.redMuted : C.muted, fontSize: 11 }}>{m}m {pad(s)}s ago</span>;
 }
 
-// ─── Vibrant Color Palette ────────────────────────────────────────────────────
+
 const C = {
-  bg:         "#0b0f1a",
-  panel:      "#111827",
-  card:       "#161d2d",
-  border:     "rgba(255,255,255,0.08)",
-  border2:    "rgba(255,255,255,0.14)",
+  bg: "#0b0f1a",
+  panel: "#111827",
+  card: "#161d2d",
+  border: "rgba(255,255,255,0.08)",
+  border2: "rgba(255,255,255,0.14)",
   // Brand
-  orange:     "#e8610a",
-  orangeDim:  "rgba(232,97,10,0.15)",
+  orange: "#e8610a",
+  orangeDim: "rgba(232,97,10,0.15)",
   // Text
-  text:       "#f1f5f9",
-  muted:      "#64748b",
-  mutedMid:   "#94a3b8",
+  text: "#f1f5f9",
+  muted: "#64748b",
+  mutedMid: "#94a3b8",
   // Status colors — fully saturated
   greenMuted: "#16a34a",
-  greenText:  "#22c55e",
-  blueMuted:  "#2563eb",
-  blueText:   "#60a5fa",
+  greenText: "#22c55e",
+  blueMuted: "#2563eb",
+  blueText: "#60a5fa",
   amberMuted: "#d97706",
-  amberText:  "#f59e0b",
-  redMuted:   "#dc2626",
-  redText:    "#f87171",
+  amberText: "#f59e0b",
+  redMuted: "#dc2626",
+  redText: "#f87171",
   // Column accents — vivid
-  colNew:     "#ea580c",      // bright orange
-  colCook:    "#3b82f6",      // bright blue
-  colReady:   "#22c55e",      // bright green
+  colNew: "#ea580c",      // bright orange
+  colCook: "#3b82f6",      // bright blue
+  colReady: "#22c55e",      // bright green
   colNewText: "#fb923c",
-  colCookText:"#93c5fd",
-  colReadyText:"#86efac",
+  colCookText: "#93c5fd",
+  colReadyText: "#86efac",
 };
 
 // ─── ETA Clock Picker ─────────────────────────────────────────────────────────
@@ -80,7 +78,7 @@ function EtaClockPicker({ value, onChange }) {
   const dragging = useRef(false);
   const handleMove = (e) => { if (dragging.current) onChange(String(minutesFromEvent(e))); };
   const handleDown = (e) => { dragging.current = true; onChange(String(minutesFromEvent(e))); };
-  const handleUp   = () => { dragging.current = false; };
+  const handleUp = () => { dragging.current = false; };
 
   useEffect(() => {
     window.addEventListener("mouseup", handleUp);
@@ -151,11 +149,11 @@ function EtaClockPicker({ value, onChange }) {
           {/* Selected arc */}
           {minutes > 0 && (() => {
             const startA = -90 * Math.PI / 180;
-            const endA   = angleFromMinutes(minutes);
-            const large  = minutes > 30 ? 1 : 0;
+            const endA = angleFromMinutes(minutes);
+            const large = minutes > 30 ? 1 : 0;
             const r3 = 44;
             const sx = 60 + r3 * Math.cos(startA), sy = 60 + r3 * Math.sin(startA);
-            const ex = 60 + r3 * Math.cos(endA),   ey = 60 + r3 * Math.sin(endA);
+            const ex = 60 + r3 * Math.cos(endA), ey = 60 + r3 * Math.sin(endA);
             return <path d={`M 60 60 L ${sx} ${sy} A ${r3} ${r3} 0 ${large} 1 ${ex} ${ey} Z`}
               fill={`${C.orange}28`} />;
           })()}
@@ -206,18 +204,18 @@ function EtaClockPicker({ value, onChange }) {
 
 export default function CookDashboard() {
   const rootRef = useRef(null);
-  const [orders, setOrders]         = useState([]);
-  const [notification, setNotif]    = useState(null);
+  const [orders, setOrders] = useState([]);
+  const [notification, setNotif] = useState(null);
   const [etaByOrder, setEtaByOrder] = useState({});
-  const [filter, setFilter]         = useState("all");
+  const [filter, setFilter] = useState("all");
   const [fullscreen, setFullscreen] = useState(false);
-  const [isReqOpen, setIsReqOpen]   = useState(false);
-  const [dishName, setDishName]     = useState("");
-  const [category, setCategory]     = useState("");
-  const [price, setPrice]           = useState("");
-  const [notes, setNotes]           = useState("");
+  const [isReqOpen, setIsReqOpen] = useState(false);
+  const [dishName, setDishName] = useState("");
+  const [category, setCategory] = useState("");
+  const [price, setPrice] = useState("");
+  const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [openEtaId, setOpenEtaId]   = useState(null); // which order has clock open
+  const [openEtaId, setOpenEtaId] = useState(null); // which order has clock open
 
   const norm = v => String(v || "").toLowerCase();
 
@@ -270,7 +268,7 @@ export default function CookDashboard() {
           : o
       ));
       await API.patch(`/orders/${orderId}/status`, { status: nextStatus, ...extra });
-      if (nextStatus === "ready")    showNotif("Order marked as ready");
+      if (nextStatus === "ready") showNotif("Order marked as ready");
       if (nextStatus === "accepted") showNotif("Order accepted — timer started");
     } catch (e) {
       console.error(e);
@@ -300,27 +298,27 @@ export default function CookDashboard() {
     finally { setSubmitting(false); }
   };
 
-  // Categorise
-  const newOrders    = orders.filter(o => norm(o.status) === "requested");
-  const cookingNow   = orders.filter(o => ["accepted", "preparing"].includes(norm(o.status)));
+
+  const newOrders = orders.filter(o => norm(o.status) === "requested");
+  const cookingNow = orders.filter(o => ["accepted", "preparing"].includes(norm(o.status)));
   const readyToServe = orders.filter(o => norm(o.status) === "ready");
 
   const isDelayed = o => o.etaSeconds && o.acceptedAt && (Date.now() - new Date(o.acceptedAt)) / 1000 > o.etaSeconds;
-  const isUrgent  = o => o.createdAt && (Date.now() - new Date(o.createdAt)) / 60000 > 15;
+  const isUrgent = o => o.createdAt && (Date.now() - new Date(o.createdAt)) / 60000 > 15;
 
   const applyFilter = list => {
     if (filter === "delayed") return list.filter(isDelayed);
-    if (filter === "urgent")  return list.filter(isUrgent);
+    if (filter === "urgent") return list.filter(isUrgent);
     return list;
   };
 
-  const filteredNew     = applyFilter(newOrders);
+  const filteredNew = applyFilter(newOrders);
   const filteredCooking = applyFilter(cookingNow);
-  const delayedCount    = cookingNow.filter(isDelayed).length;
+  const delayedCount = cookingNow.filter(isDelayed).length;
 
   return (
     <div ref={rootRef} style={{ minHeight: "100vh", background: C.bg, display: "flex", flexDirection: "column", fontFamily: "system-ui,sans-serif" }}>
-      {/* ── GLOBAL KEYFRAMES ── */}
+
       <style>{`
         @keyframes pulseGlow {
           0%, 100% { opacity: 1; box-shadow: 0 0 8px 2px currentColor; }
@@ -376,9 +374,9 @@ export default function CookDashboard() {
         {/* Filter tabs */}
         <div style={{ display: "flex", alignItems: "center", gap: 2, background: C.bg, borderRadius: 8, padding: 3, border: `1px solid ${C.border}` }}>
           {[
-            { key: "all",     label: "All Orders" },
-            { key: "delayed", label: "Delayed",  dot: C.amberText },
-            { key: "urgent",  label: "Urgent",   dot: C.redText },
+            { key: "all", label: "All Orders" },
+            { key: "delayed", label: "Delayed", dot: C.amberText },
+            { key: "urgent", label: "Urgent", dot: C.redText },
           ].map(({ key, label, dot }) => (
             <button key={key} onClick={() => setFilter(key)} style={{
               display: "flex", alignItems: "center", gap: 5,
@@ -406,8 +404,8 @@ export default function CookDashboard() {
           }}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               {fullscreen
-                ? <><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></>
-                : <><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></>}
+                ? <><path d="M8 3v3a2 2 0 0 1-2 2H3" /><path d="M21 8h-3a2 2 0 0 1-2-2V3" /><path d="M3 16h3a2 2 0 0 1 2 2v3" /><path d="M16 21v-3a2 2 0 0 1 2-2h3" /></>
+                : <><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M21 8V5a2 2 0 0 0-2-2h-3" /><path d="M3 16v3a2 2 0 0 0 2 2h3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></>}
             </svg>
             {fullscreen ? "Exit" : "Fullscreen"}
           </button>
@@ -446,8 +444,8 @@ export default function CookDashboard() {
           borderRight={`1px solid ${C.border}`}
           sub={delayedCount > 0
             ? <span style={{ fontSize: 10, color: C.amberText, background: "rgba(245,158,11,0.12)", borderRadius: 4, padding: "1px 6px" }}>
-                {delayedCount} delayed
-              </span>
+              {delayedCount} delayed
+            </span>
             : null}
           isEmpty={filteredCooking.length === 0} emptyMsg="Kitchen clear" emptySubMsg="Accepted orders appear here"
         >
@@ -480,8 +478,8 @@ export default function CookDashboard() {
             <p style={{ fontSize: 11.5, color: C.muted, marginBottom: 18 }}>Submit a proposal for the admin menu.</p>
             <form onSubmit={submitDishRequest}>
               {[{ label: "Dish Name *", val: dishName, set: setDishName, type: "text", ph: "e.g. Paneer Tikka", req: true },
-                { label: "Category",   val: category,  set: setCategory,  type: "text",   ph: "e.g. Starter" },
-                { label: "Price (₹)",  val: price,     set: setPrice,     type: "number", ph: "e.g. 250" }]
+              { label: "Category", val: category, set: setCategory, type: "text", ph: "e.g. Starter" },
+              { label: "Price (₹)", val: price, set: setPrice, type: "number", ph: "e.g. 250" }]
                 .map(({ label, val, set, type, ph, req }) => (
                   <div key={label} style={{ marginBottom: 12 }}>
                     <label style={{ display: "block", fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: C.muted, marginBottom: 5 }}>{label}</label>
@@ -695,7 +693,7 @@ function NewOrderCard({ order, etaValue, onEtaChange, onAccept, clockOpen, onClo
         title="Click to set ETA"
       >
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.orange} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
         </svg>
         <span style={{ fontSize: 11, color: C.muted, fontWeight: 500 }}>Cook time</span>
         <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 700, color: etaValue ? C.text : C.muted }}>
@@ -736,24 +734,24 @@ function CookingCard({ order, onAction }) {
 
   // Use acceptedAt if available, else fall back to createdAt
   const startTime = order.acceptedAt || order.createdAt;
-  const secGone   = startTime ? Math.floor((Date.now() - new Date(startTime)) / 1000) : 0;
+  const secGone = startTime ? Math.floor((Date.now() - new Date(startTime)) / 1000) : 0;
   const remaining = (order.etaSeconds || 0) - secGone;
-  const isOverdue   = remaining <= 0;
-  const isLastMin   = remaining > 0 && remaining <= 60;  // under 1 minute → urgent
+  const isOverdue = remaining <= 0;
+  const isLastMin = remaining > 0 && remaining <= 60;  // under 1 minute → urgent
   const absR = Math.abs(remaining);
   const remM = Math.floor(absR / 60), remS = absR % 60;
-  const pct  = order.etaSeconds ? Math.min(100, (secGone / order.etaSeconds) * 100) : 0;
+  const pct = order.etaSeconds ? Math.min(100, (secGone / order.etaSeconds) * 100) : 0;
 
   // Dynamic accent colours based on state
   const leftBorderColor = isOverdue ? C.redMuted
-    : isLastMin           ? "#f59e0b"
-    : isPrep              ? C.blueMuted
-    :                       C.amberMuted;
+    : isLastMin ? "#f59e0b"
+      : isPrep ? C.blueMuted
+        : C.amberMuted;
 
   const leftText = isOverdue ? C.redText
-    : isLastMin  ? C.amberText
-    : isPrep     ? C.blueText
-    :              C.amberText;
+    : isLastMin ? C.amberText
+      : isPrep ? C.blueText
+        : C.amberText;
 
   return (
     <div style={{
@@ -820,9 +818,9 @@ function CookingCard({ order, onAction }) {
             <div style={{
               height: "100%", width: `${pct}%`, borderRadius: 3,
               background: isOverdue ? C.redMuted
-                : isLastMin  ? `linear-gradient(90deg, #f59e0b, #ef4444)`
-                : isPrep     ? `linear-gradient(90deg, ${C.blueMuted}, ${C.blueText})`
-                :              `linear-gradient(90deg, ${C.amberMuted}, ${C.amberText})`,
+                : isLastMin ? `linear-gradient(90deg, #f59e0b, #ef4444)`
+                  : isPrep ? `linear-gradient(90deg, ${C.blueMuted}, ${C.blueText})`
+                    : `linear-gradient(90deg, ${C.amberMuted}, ${C.amberText})`,
               transition: "width 1s linear",
             }} />
           </div>

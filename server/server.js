@@ -71,13 +71,13 @@ function getRemainingEtaSeconds(orderLike) {
 io.on('connection', (socket) => {
   console.log('socket connected', socket.id);
 
-  // Customer joins their table room on page load
+
   socket.on('joinTableRoom', (tableId) => {
     socket.join(`table_${tableId}`);
     console.log(`Socket ${socket.id} joined table_${tableId}`);
   });
 
-  // Per-order subscription for AfterOrder screen
+
   socket.on('order:subscribe', async ({ orderId }) => {
     if (!orderId) return;
     const room = `order_${orderId}`;
@@ -101,26 +101,23 @@ io.on('connection', (socket) => {
     socket.leave(`order_${orderId}`);
   });
 
-  // Customer calls waiter → broadcast to waiters room
   socket.on('callWaiter', ({ tableId, orderId }) => {
     console.log(`callWaiter from table ${tableId}, order ${orderId}`);
     io.to(`table_${tableId}`).emit('waiter:called', { tableId, orderId });
     io.to('waiters').emit('waiter:called', { tableId, orderId });
   });
 
-  // Waiter accepts the call → send confirmation back to customer's table room
   socket.on('waiter:accept', ({ tableId, orderId }) => {
     console.log(`Waiter accepted call for table ${tableId}`);
     io.to(`table_${tableId}`).emit('waiter:accepted', { tableId, orderId });
   });
 
-  // ── Customer paid → notify all waiters to clean the table ──
   socket.on('table:paid', ({ tableId, orderId, total }) => {
     console.log(`Table ${tableId} paid (order ${orderId}, ₹${total}) — notifying waiters to clean`);
     io.to('waiters').emit('table:clean', { tableId, orderId, total });
   });
 
-  // Waiter dashboard joins this room to receive all notifications
+
   socket.on('joinWaiters', () => {
     socket.join('waiters');
     console.log(`Socket ${socket.id} joined waiters room`);
@@ -146,7 +143,7 @@ app.use('/api/menu', menuRoutes);
 app.use("/api/payment", stripeRoutes);
 app.use("/api/feedbacks", require("./routes/feedbackRoutes"));
 
-// Background: clear expired holds every 30s
+
 setInterval(async () => {
   const now = new Date();
   const expired = await Table.find({ status: 'held', holdExpiresAt: { $lte: now } });

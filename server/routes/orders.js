@@ -205,7 +205,7 @@ async function markOrdersPaidAndNotify({ req, orders, paymentMethod = "online" }
   return { summary, created };
 }
 
-// CREATE order
+
 router.post("/create", auth, async (req, res) => {
   try {
     const { email, phone, items, totalCost, tableNo } = req.body;
@@ -274,7 +274,7 @@ router.post("/summary", auth, async (req, res) => {
   }
 });
 
-// GET all live/current orders
+
 router.get("/", auth, requireRole("cook", "waiter", "admin"), async (req, res) => {
   try {
     const orders = await Order.find().sort({ createdAt: -1 });
@@ -285,7 +285,7 @@ router.get("/", auth, requireRole("cook", "waiter", "admin"), async (req, res) =
   }
 });
 
-// 🔥 SALES ENDPOINT – this MUST be BEFORE "/:id"
+
 router.get("/sales", auth, requireRole("admin"), async (req, res) => {
   try {
     const previousOrders = await PreviousOrder.find()
@@ -301,7 +301,7 @@ router.get("/sales", auth, requireRole("admin"), async (req, res) => {
   }
 });
 
-// GET one (full order)
+
 router.get("/:id", auth, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
@@ -313,7 +313,7 @@ router.get("/:id", auth, async (req, res) => {
   }
 });
 
-// UPDATE status
+
 router.patch("/:id/status", auth, requireRole("cook", "waiter", "admin"), async (req, res) => {
   try {
     const { status, etaSeconds } = req.body;
@@ -426,11 +426,11 @@ router.delete("/:id", auth, async (req, res) => {
         );
         const nextRouteState = workflow.routeState && typeof workflow.routeState === "object"
           ? {
-              ...workflow.routeState,
-              existingOrderIds: Array.isArray(workflow.routeState.existingOrderIds)
-                ? workflow.routeState.existingOrderIds.filter((orderId) => String(orderId) !== String(order._id))
-                : nextActiveOrderIds,
-            }
+            ...workflow.routeState,
+            existingOrderIds: Array.isArray(workflow.routeState.existingOrderIds)
+              ? workflow.routeState.existingOrderIds.filter((orderId) => String(orderId) !== String(order._id))
+              : nextActiveOrderIds,
+          }
           : workflow.routeState;
 
         await WorkflowSession.findByIdAndUpdate(workflow._id, {

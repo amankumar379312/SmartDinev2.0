@@ -614,7 +614,7 @@ ${cleanQuestion}
     return fallback;
   }
 }
-async function buildDashboardSummary(timeRange = "7_days", startDate, endDate) {
+async function buildDashboardSummary(timeRange = "7_days", startDate, endDate, { skipInsights = false } = {}) {
   const [
     paidOrders,
     liveOrders,
@@ -1156,7 +1156,9 @@ async function buildDashboardSummary(timeRange = "7_days", startDate, endDate) {
     },
   };
 
-  summary.insights = await buildInsightPayload(summary);
+  if (!skipInsights) {
+    summary.insights = await buildInsightPayload(summary);
+  }
   return summary;
 }
 
@@ -1203,7 +1205,7 @@ router.get("/insights", async (req, res) => {
 router.post("/insights/chat", async (req, res) => {
   try {
     const { question, history, timeRange, startDate, endDate } = req.body || {};
-    const summary = await buildDashboardSummary(timeRange, startDate, endDate);
+    const summary = await buildDashboardSummary(timeRange, startDate, endDate, { skipInsights: true });
     const reply = await buildChatReply(summary, question, Array.isArray(history) ? history : []);
     return res.json(reply);
   } catch (error) {
@@ -1302,6 +1304,33 @@ router.delete("/staff/:role/:id", async (req, res) => {
   } catch (error) {
     console.error("Failed to remove staff member:", error);
     return res.status(500).json({ message: "Failed to remove staff member" });
+  }
+});
+
+router.put("/staff/:role/:id", async (req, res) => {
+  try {
+    const role = String(req.params.role || "").toLowerCase();
+    const Model = role === "waiter" ? Waiter : role === "cook" ? Cook : null;
+
+    if (!Model) {
+      return res.status(400).json({ message: "role must be waiter or cook" });
+    }
+
+    const { name, phone, email, salary, employmentStatus } = req.body;
+    const updated = await Model.findByIdAndUpdate(
+      req.params.id,
+      { $set: { name, phone, email, salary: Number(salary), employmentStatus } },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: "Staff member not found" });
+    }
+
+    return res.json({ message: `${role} updated successfully`, staff: updated });
+  } catch (error) {
+    console.error("Failed to update staff member:", error);
+    return res.status(500).json({ message: "Failed to update staff member" });
   }
 });
 

@@ -60,10 +60,12 @@ export default function WaiterDashboard() {
       const list = Array.isArray(res.data?.orders)
         ? res.data.orders
         : Array.isArray(res.data) ? res.data : [];
-      const ready = list
+      const cutOff = new Date(Date.now() - 16 * 60 * 60 * 1000);
+      const activeList = list.filter(o => new Date(o.createdAt || 0) > cutOff);
+      const ready = activeList
         .filter(o => normalize(o.status) === "ready")
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-      const servedUnpaid = list
+      const servedUnpaid = activeList
         .filter(o => normalize(o.status) !== "paid")
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       const groupedBillReady = Object.values(servedUnpaid.reduce((acc, order) => {

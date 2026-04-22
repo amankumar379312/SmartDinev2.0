@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import API from "../api";
 import AdminSidebar from "../components/AdminSidebar";
 import LogoutButton from "../components/LogoutButton";
@@ -180,9 +180,10 @@ export default function AdminDashboard() {
     return { timeRange: nextTimeRange };
   }, [appliedRange, timeRange]);
 
+  const isDashboardLoaded = useRef(false);
+
   const fetchDashboard = useCallback(async () => {
-    // First load — show full spinner. Subsequent range changes — keep UI, just refresh data.
-    const isFirstLoad = !dashboard;
+    const isFirstLoad = !isDashboardLoaded.current;
     if (isFirstLoad) {
       setLoading(true);
     } else {
@@ -192,10 +193,9 @@ export default function AdminDashboard() {
     try {
       const { data } = await API.get("/admin-dashboard", { params: buildRangeParams() });
       let resolvedInsights = data?.insights || null;
-
+      isDashboardLoaded.current = true;
       setDashboard(data);
       setInsights(resolvedInsights);
-      setChatMessages([]);
       setChatPrompts(resolvedInsights?.actions?.length ? resolvedInsights.actions : [
         "What stands out in this range?",
         "Which hours are busiest?",
@@ -208,7 +208,7 @@ export default function AdminDashboard() {
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, [buildRangeParams, dashboard]);
+  }, [buildRangeParams]);
 
   const fetchMenu = async () => {
     try {
@@ -229,6 +229,7 @@ export default function AdminDashboard() {
   }, []);
 
   const handlePresetRangeChange = (value) => {
+    setChatMessages([]);
     if (value === "custom") {
       setTimeRange("custom");
       if (customRangeDraft.startDate && customRangeDraft.endDate) {
@@ -249,6 +250,7 @@ export default function AdminDashboard() {
       alert("End date must be after start date.");
       return;
     }
+    setChatMessages([]);
     setTimeRange("custom");
     setAppliedRange({ ...customRangeDraft });
   };
